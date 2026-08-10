@@ -1,0 +1,24 @@
+{
+  "name": "@integrador/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@integrador/contracts": "workspace:*",
+    "@integrador/db": "workspace:*",
+    "@integrador/integrations": "workspace:*",
+    "bullmq": "6.0.9"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

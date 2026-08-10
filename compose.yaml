@@ -1,0 +1,136 @@
+name: integrador-bling
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: integrador-bling-local:latest
+  restart: unless-stopped
+  environment: &app-environment
+    NODE_ENV: production
+    DATABASE_URL: postgresql://integrador:integrador@postgres:5432/integrador_bling
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    DEMO_MODE: "false"
+    DEMO_TENANT_ID: 00000000-0000-4000-8000-000000000001
+    COOKIE_SECURE: "false"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: integrador_bling
+      POSTGRES_USER: integrador
+      POSTGRES_PASSWORD: integrador
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U integrador -d integrador_bling"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command:
+      [
+        "corepack",
+        "pnpm",
+        "--filter",
+        "@integrador/db",
+        "exec",
+        "prisma",
+        "migrate",
+        "deploy",
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    command: ["corepack", "pnpm", "--filter", "@integrador/api", "start"]
+    environment:
+      <<: *app-environment
+      API_PORT: 3001
+      WEB_ORIGIN: http://localhost:3000
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    <<: *app
+    command: ["corepack", "pnpm", "--filter", "@integrador/worker", "start"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.kill(1, 0)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  web:
+    <<: *app
+    command: ["corepack", "pnpm", "--filter", "@integrador/web", "start"]
+    environment:
+      <<: *app-environment
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:

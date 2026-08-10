@@ -1,0 +1,10 @@
+legacy
+.git
+.agents
+node_modules
+**/node_modules
+**/dist
+**/.next
+coverage
+.env*
+!.env.example

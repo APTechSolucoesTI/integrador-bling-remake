@@ -1,0 +1,540 @@
+.actions {
+  display: flex;
+  gap: 8px;
+}
+.disabled {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px dashed #ccd6d1;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #89958f;
+  background: #f6f8f7;
+  font-size: 10px;
+}
+.createButton {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #fff;
+  background: #173b2d;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+.success {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #c9e7d3;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #28794a;
+  background: #f2fbf5;
+  font-size: 9px;
+}
+.statusCards {
+  margin-top: 25px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+}
+.statusCards button {
+  min-height: 62px;
+  padding: 11px 13px;
+  border: 1px solid #e0e6e3;
+  border-radius: 12px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  color: #67756e;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.statusCards button:first-child {
+  grid-template-columns: 1fr auto;
+}
+.statusCards .selected {
+  border-color: #70ce93;
+  box-shadow: 0 6px 20px rgba(42, 121, 74, 0.08);
+}
+.statusCards i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.statusCards span {
+  font-size: 10px;
+  font-weight: 650;
+}
+.statusCards strong {
+  color: #22332b;
+  font-size: 18px;
+}
+.filtersGrid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1fr auto;
+  gap: 9px;
+  align-items: end;
+}
+.goalGrid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.goalCard {
+  border: 1px solid #dee5e1;
+  border-radius: 15px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(25, 55, 42, 0.045);
+}
+.goalCard header {
+  padding: 16px 17px 13px;
+  border-bottom: 1px solid #e8ecea;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.goalCard header span:first-child {
+  color: #829089;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.goalCard h2 {
+  margin: 4px 0 0;
+  color: #21332a;
+  font-size: 19px;
+}
+.status {
+  padding: 5px 8px;
+  border-radius: 99px;
+  font-size: 8px !important;
+  font-weight: 800 !important;
+  text-transform: none !important;
+  white-space: nowrap;
+}
+.pending {
+  color: #956913 !important;
+  background: #fff0c7;
+}
+.done {
+  color: #28784a !important;
+  background: #ddf4e5;
+}
+.cancelled {
+  color: #a44848 !important;
+  background: #fbe0e0;
+}
+.unknown {
+  color: #65716b !important;
+  background: #edf1ef;
+}
+.period {
+  margin: 14px 17px 0;
+  padding: 10px 11px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4b6558;
+  background: #f5f8f6;
+  font-size: 10px;
+}
+.period small {
+  display: block;
+  margin-bottom: 2px;
+  color: #8b9891;
+  font-size: 7px;
+  text-transform: uppercase;
+}
+.mainValue {
+  padding: 18px 17px;
+  display: grid;
+}
+.mainValue small {
+  color: #829089;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+.mainValue strong {
+  margin: 4px 0;
+  color: #1d392b;
+  font-size: 27px;
+  letter-spacing: -1px;
+}
+.mainValue span {
+  color: #929e98;
+  font-size: 9px;
+}
+.breakdown {
+  padding: 0 17px 17px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+.breakdown > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e5eae7;
+  border-radius: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: #4b8464;
+}
+.breakdown small,
+.breakdown strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.breakdown small {
+  color: #8a9690;
+  font-size: 7px;
+}
+.breakdown strong {
+  margin-top: 3px;
+  color: #33483d;
+  font-size: 10px;
+}
+.goalCard > footer {
+  min-height: 42px;
+  padding: 0 17px;
+  border-top: 1px solid #edf0ee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #8a9690;
+  font-size: 8px;
+}
+.goalActions {
+  display: flex;
+  gap: 6px;
+}
+.goalActions button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid #e0e6e3;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #8b4c4c;
+  background: #fff8f8;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 700;
+}
+.goalActions button:last-child {
+  border-color: #cfe5d7;
+  color: #2f754c;
+  background: #f3faf5;
+}
+.goalActions button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+.empty {
+  min-height: 180px;
+  grid-column: 1 / -1;
+  border: 1px dashed #d7dfdb;
+  border-radius: 14px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: #7d8b84;
+  background: #fafcfb;
+  font-size: 11px;
+}
+.pagination {
+  margin-top: 14px;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #7f8c85;
+  font-size: 10px;
+}
+.pagination div {
+  display: flex;
+  gap: 5px;
+}
+.pagination button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #dde4e0;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #3b5046;
+  background: #fff;
+}
+.pagination button:disabled {
+  opacity: 0.4;
+}
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  padding: 18px;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 23, 16, 0.56);
+  backdrop-filter: blur(6px);
+}
+.modal {
+  width: min(860px, 100%);
+  max-height: calc(100vh - 36px);
+  padding: 20px;
+  border-radius: 17px;
+  overflow-y: auto;
+  background: #fff;
+}
+.modal > header {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+}
+.modal header span {
+  color: #398159;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.modal h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+.modal > header button {
+  width: 31px;
+  height: 31px;
+  border: 1px solid #e0e5e2;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  cursor: pointer;
+}
+.goalForm {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 9px;
+}
+.goalForm label {
+  display: grid;
+  gap: 5px;
+}
+.goalForm span {
+  color: #798680;
+  font-size: 7px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.goalForm input,
+.targetPicker article > input,
+.costEditor input {
+  width: 100%;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid #dce3df;
+  border-radius: 8px;
+  outline: 0;
+  font: inherit;
+  font-size: 9px;
+}
+.targetColumns {
+  margin-top: 13px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.targetPicker {
+  border: 1px solid #e0e5e2;
+  border-radius: 11px;
+  overflow: hidden;
+}
+.targetPicker > header {
+  min-height: 47px;
+  padding: 0 11px;
+  border-bottom: 1px solid #e7ebe9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.targetPicker header strong {
+  font-size: 9px;
+}
+.targetPicker header span {
+  color: #46815e;
+  font-size: 7px;
+}
+.targetPicker > div {
+  max-height: 230px;
+  overflow-y: auto;
+}
+.targetPicker article {
+  min-height: 52px;
+  padding: 7px 9px;
+  border-bottom: 1px solid #edf0ee;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px;
+  align-items: center;
+  gap: 7px;
+}
+.targetPicker article label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.targetPicker article label > input {
+  accent-color: #36a864;
+}
+.targetPicker article label span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.targetPicker article strong {
+  overflow: hidden;
+  color: #3c4d45;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.targetPicker article small {
+  color: #919c97;
+  font-size: 6px;
+}
+.targetPicker > div > p {
+  min-height: 80px;
+  display: grid;
+  place-content: center;
+  color: #8b9791;
+  font-size: 8px;
+}
+.costEditor {
+  margin-top: 12px;
+  padding: 11px;
+  border: 1px solid #e0e5e2;
+  border-radius: 11px;
+}
+.costEditor > header {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.costEditor header div {
+  display: grid;
+  gap: 2px;
+}
+.costEditor header strong {
+  font-size: 9px;
+}
+.costEditor header small {
+  color: #909b96;
+  font-size: 7px;
+}
+.costEditor header button {
+  padding: 6px 8px;
+  border: 1px solid #dce3df;
+  border-radius: 7px;
+  display: flex;
+  gap: 5px;
+  color: #397b54;
+  background: #f5faf7;
+  font-size: 7px;
+}
+.costEditor > div {
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: 1fr 130px 31px;
+  gap: 6px;
+}
+.costEditor > div button {
+  border: 1px solid #ecd3d3;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #a65050;
+  background: #fff6f6;
+}
+.modal > footer {
+  margin-top: 17px;
+  padding-top: 13px;
+  border-top: 1px solid #e6eae8;
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.modal > footer button {
+  min-height: 37px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 9px;
+}
+.modal > footer button:last-child {
+  color: #fff;
+  background: #173b2d;
+}
+@media (max-width: 1050px) {
+  .filtersGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .goalGrid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 620px) {
+  .actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .statusCards {
+    display: flex;
+    overflow-x: auto;
+  }
+  .statusCards button {
+    min-width: 145px;
+  }
+  .filtersGrid {
+    grid-template-columns: 1fr;
+  }
+  .breakdown {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 620px) {
+  .goalForm,
+  .targetColumns {
+    grid-template-columns: 1fr;
+  }
+  .targetPicker article {
+    grid-template-columns: 1fr 90px;
+  }
+  .costEditor > div {
+    grid-template-columns: 1fr 90px 31px;
+  }
+}

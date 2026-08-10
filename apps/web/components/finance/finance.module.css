@@ -1,0 +1,33 @@
+.topTitle { display: flex; align-items: center; gap: 7px; color: #53655c; font-size: 11px; font-weight: 700; }
+.summaryGrid { margin-top: 25px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
+.summaryCard { min-height: 112px; padding: 15px; border: 1px solid #dfe5e2; border-radius: 14px; display: flex; gap: 11px; background: #fff; overflow: hidden; position: relative; }
+.summaryCard::after { width: 70px; height: 70px; border-radius: 50%; content: ""; position: absolute; right: -31px; bottom: -33px; background: currentColor; opacity: .055; }
+.summaryCard > span { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; flex: 0 0 auto; background: currentColor; }
+.summaryCard > span svg { color: #fff; width: 17px; }
+.summaryCard div { min-width: 0; display: grid; align-content: start; gap: 3px; }
+.summaryCard small { color: #85928c; font-size: 8px; font-weight: 750; letter-spacing: .5px; text-transform: uppercase; }
+.summaryCard strong { overflow: hidden; color: #26382f; font-size: clamp(15px, 1.5vw, 21px); letter-spacing: -.5px; text-overflow: ellipsis; white-space: nowrap; }
+.summaryCard p { margin: 2px 0 0; color: #98a29d; font-size: 7px; }
+.neutral { color: #50645a; }
+.green { color: #35a963; }
+.amber { color: #d6a130; }
+.red { color: #cf5a5a; }
+.blue { color: #4e91b8; }
+.filterGrid { display: grid; grid-template-columns: repeat(4, minmax(125px, 1fr)); gap: 9px; align-items: end; }
+.lossToggle { height: 37px; padding: 0 10px; border: 1px solid #e2dbd8; border-radius: 9px; display: flex; align-items: center; gap: 8px; color: #7d5550; background: #fffafa; cursor: pointer; font-size: 10px; }
+.lossToggle input { accent-color: #b85858; }
+.lossToggle span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.tableWrap table { min-width: 1320px; }
+.tableWrap td { max-width: 245px; }
+.profit, .loss { font-weight: 800; white-space: nowrap; }
+.profit { color: #27824d !important; }
+.loss { color: #b74747 !important; }
+.calculation { width: fit-content; padding: 5px 8px; border-radius: 99px; display: flex; align-items: center; gap: 5px; font-size: 7px; font-weight: 800; }
+.calculation i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.success { color: #277a49; background: #e0f4e7; }
+.warning { color: #987018; background: #fff1c9; }
+.failure { color: #a34848; background: #fbe2e2; }
+.observation { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1250px) { .summaryGrid { grid-template-columns: repeat(3, 1fr); } .filterGrid { grid-template-columns: repeat(3, minmax(125px, 1fr)); } }
+@media (max-width: 760px) { .summaryGrid { grid-template-columns: repeat(2, 1fr); } .filterGrid { grid-template-columns: repeat(2, minmax(120px, 1fr)); } }
+@media (max-width: 480px) { .summaryGrid, .filterGrid { grid-template-columns: 1fr; } .summaryCard { min-height: 92px; } }

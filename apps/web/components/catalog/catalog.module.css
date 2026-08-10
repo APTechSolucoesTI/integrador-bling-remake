@@ -1,0 +1,24 @@
+.headerActions { display: flex; gap: 8px; }
+.syncDisabled { min-height: 38px; padding: 0 14px; border: 1px solid #d4e6da; border-radius: 10px; display: flex; align-items: center; gap: 7px; color: #347c51; background: #f3faf5; font-size: 10px; text-decoration: none; }
+.messageToggle { padding: 6px 8px; border: 0; border-radius: 99px; display: flex; align-items: center; gap: 5px; color: #287c4b; background: #e0f4e7; cursor: pointer; font-size: 7px; font-weight: 800; }.messageToggle i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }.messageOff { color: #a34848; background: #fbe2e2; }.messageToggle:disabled { cursor: default; opacity: .7; }
+.summaryBar { margin-top: 24px; min-height: 76px; padding: 13px 17px; border: 1px solid #dfe6e2; border-radius: 14px; display: flex; align-items: center; justify-content: space-between; gap: 20px; background: linear-gradient(135deg, #fff, #f4faf6); }
+.summaryBar > div { display: grid; grid-template-columns: 37px auto; column-gap: 10px; align-items: center; }
+.summaryBar > div > span { width: 37px; height: 37px; border-radius: 10px; grid-row: 1 / 3; display: grid; place-items: center; color: #287f50; background: #dff5e7; }
+.summaryBar small { color: #85918b; font-size: 8px; text-transform: uppercase; letter-spacing: .5px; }
+.summaryBar strong { color: #20342a; font-size: 21px; }
+.summaryBar p { max-width: 560px; margin: 0; color: #78867f; font-size: 10px; text-align: right; }
+.productFilters { display: grid; grid-template-columns: repeat(5, minmax(110px, 1fr)) auto; gap: 9px; align-items: end; }
+.peopleFilters { display: grid; grid-template-columns: minmax(220px, 2fr) minmax(160px, 1fr) minmax(170px, 1fr) auto; gap: 9px; align-items: end; }
+.flag { width: fit-content; padding: 5px 8px; border-radius: 999px; color: #65716b; background: #edf1ef; font-size: 8px; font-weight: 750; white-space: nowrap; }
+.flagYes { color: #28794a; background: #dcf4e5; }
+.flagOff { color: #9a4e42; background: #fae4e0; }
+.person { display: flex; align-items: center; gap: 9px; }
+.person > span { width: 31px; height: 31px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; color: #236d45; background: #dff3e7; font-size: 8px; font-weight: 800; }
+.contact { display: grid; gap: 5px; }
+.contact span { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.address { display: flex; align-items: flex-start; gap: 6px; max-width: 250px; }
+.address svg { margin-top: 1px; flex: 0 0 auto; color: #4a8b66; }
+.address span, .address small { display: block; }
+@media (max-width: 1180px) { .productFilters { grid-template-columns: repeat(3, minmax(120px, 1fr)); } }
+@media (max-width: 760px) { .summaryBar { align-items: flex-start; } .summaryBar p { max-width: 50%; } .productFilters, .peopleFilters { grid-template-columns: repeat(2, minmax(120px, 1fr)); } }
+@media (max-width: 520px) { .headerActions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; } .summaryBar { display: grid; } .summaryBar p { max-width: none; text-align: left; } .productFilters, .peopleFilters { grid-template-columns: 1fr; } }

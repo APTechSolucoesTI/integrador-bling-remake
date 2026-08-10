@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "allowJs": false,
+    "esModuleInterop": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "lib": ["ES2023", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "paths": {
+      "@integrador/contracts": ["./packages/contracts/src/index.ts"],
+      "@integrador/db": ["./packages/db/src/index.ts"],
+      "@integrador/domain": ["./packages/domain/src/index.ts"],
+      "@integrador/integrations": ["./packages/integrations/src/index.ts"]
+    },
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2023"
+  }
+}

@@ -1,0 +1,59 @@
+[
+  {
+    "name": "simples nacional preserva assimetria unitária",
+    "input": {
+      "regime": "SN",
+      "quantity": "2",
+      "saleTotal": "200",
+      "saleUnit": "100",
+      "discount": "10",
+      "freight": "8",
+      "otherExpenses": "2",
+      "grossTaxAdditions": "12",
+      "costTotal": "100",
+      "allocatedCosts": "10",
+      "taxes": "20",
+      "fees": "5",
+      "ipiCreditRate": "5",
+      "icmsCreditRate": "12",
+      "fiscalIncentiveProduct": false
+    },
+    "expected": {
+      "netSaleTotal": "200",
+      "netSaleUnit": "99",
+      "netCostTotal": "110",
+      "profitTotal": "55",
+      "profitUnit": "26.5",
+      "marginTotal": "27.5"
+    }
+  },
+  {
+    "name": "lucro presumido desconta créditos antes dos custos alocados",
+    "input": {
+      "regime": "LP",
+      "quantity": "2",
+      "saleTotal": "200",
+      "saleUnit": "100",
+      "discount": "10",
+      "freight": "8",
+      "otherExpenses": "2",
+      "grossTaxAdditions": "12",
+      "costTotal": "100",
+      "allocatedCosts": "10",
+      "taxes": "18",
+      "fees": "5",
+      "ipiCreditRate": "5",
+      "icmsCreditRate": "12",
+      "fiscalIncentiveProduct": false
+    },
+    "expected": {
+      "netSaleTotal": "212",
+      "netSaleUnit": "105",
+      "ipiCredit": "5",
+      "icmsCredit": "12",
+      "netCostTotal": "93",
+      "profitTotal": "86",
+      "profitUnit": "42"
+    }
+  }
+]

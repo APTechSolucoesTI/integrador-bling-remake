@@ -1,0 +1,34 @@
+{
+  "name": "@integrador/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "nest build",
+    "bootstrap:admin": "node dist/bootstrap-admin.js",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@integrador/contracts": "workspace:*",
+    "@integrador/db": "workspace:*",
+    "@integrador/domain": "workspace:*",
+    "@integrador/integrations": "workspace:*",
+    "@nestjs/common": "11.1.28",
+    "@nestjs/core": "11.1.28",
+    "@nestjs/platform-express": "11.1.28",
+    "@nestjs/swagger": "^11.0.0",
+    "bullmq": "6.0.9",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@types/express": "^5.0.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

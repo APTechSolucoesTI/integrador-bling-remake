@@ -1,0 +1,10 @@
+legacy
+.agents
+AGENTS.md
+MIGRATION_PROMPT.md
+README.md
+node_modules
+dist
+.next
+packages/db/src/generated
+pnpm-lock.yaml

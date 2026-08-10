@@ -1,0 +1,27 @@
+{
+  "name": "integrador-bling-modernization",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "corepack pnpm -r --workspace-concurrency=1 --if-present build",
+    "bootstrap:admin": "corepack pnpm --filter @integrador/api bootstrap:admin",
+    "dev": "corepack pnpm --parallel --filter './apps/*' dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "corepack pnpm -r --workspace-concurrency=1 --if-present test",
+    "typecheck": "corepack pnpm -r --workspace-concurrency=1 --if-present typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.0.0"
+  }
+}

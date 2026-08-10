@@ -1,0 +1,33 @@
+{
+  "name": "@integrador/db",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "corepack pnpm prisma:generate && tsc -p tsconfig.build.json",
+    "prisma:format": "prisma format",
+    "prisma:generate": "prisma generate",
+    "test": "vitest run",
+    "typecheck": "corepack pnpm prisma:generate && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@integrador/integrations": "workspace:*",
+    "@prisma/adapter-pg": "7.9.1",
+    "@prisma/client": "7.9.1",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.0",
+    "prisma": "7.9.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}
