@@ -5,23 +5,40 @@ import {
   SetMetadata,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import type { AuthenticatedRequest, TenantRole } from "./auth.types.js";
+import type { ModulePermission } from "@integrador/contracts";
+import type { AuthenticatedRequest } from "./auth.types.js";
 
-const ROLES_KEY = "tenant_roles";
-export const RequireRoles = (...roles: TenantRole[]) =>
-  SetMetadata(ROLES_KEY, roles);
+const PERMISSIONS_KEY = "module_permissions";
+const ANY_PERMISSIONS_KEY = "any_module_permissions";
+export const RequirePermissions = (...permissions: ModulePermission[]) =>
+  SetMetadata(PERMISSIONS_KEY, permissions);
+export const RequireAnyPermission = (...permissions: ModulePermission[]) =>
+  SetMetadata(ANY_PERMISSIONS_KEY, permissions);
 
 @Injectable()
-export class RolesGuard implements CanActivate {
+export class PermissionsGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const roles = this.reflector.getAllAndOverride<TenantRole[]>(ROLES_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    if (!roles?.length) return true;
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    return request.auth.superAdmin || roles.includes(request.auth.role);
+    if (request.auth.superAdmin) return true;
+    const permissions = this.reflector.getAllAndOverride<ModulePermission[]>(
+      PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    const anyPermissions = this.reflector.getAllAndOverride<ModulePermission[]>(
+      ANY_PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    return (
+      (!permissions?.length ||
+        permissions.every((permission) =>
+          request.auth.permissions.includes(permission),
+        )) &&
+      (!anyPermissions?.length ||
+        anyPermissions.some((permission) =>
+          request.auth.permissions.includes(permission),
+        ))
+    );
   }
 }

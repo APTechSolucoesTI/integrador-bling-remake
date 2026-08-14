@@ -41,6 +41,10 @@ O endpoint autenticado `GET /v1/dashboard/summary` implementa a primeira fatia n
 - lucro;
 - margem agregada `lucro / faturamento × 100`, com guarda para faturamento zero;
 - série mensal de faturamento, custo e lucro;
+- série diária de faturamento e quantidade de notas;
+- mediana contínua (`PERCENTILE_CONT(0.5)`) dos totais dos dias com faturamento no período;
+- ranking de clientes por faturamento, com lucro, quantidade de notas e ticket médio;
+- rankings de canais, vendedores e produtos;
 - notas recentes com boleto e rastreio.
 
 O tenant nunca vem do parâmetro da requisição. A API consulta a `view_nfe` do PostgreSQL legado usando somente o `legacyUnitId` associado ao tenant autorizado e passa os resultados pelo agregador decimal de domínio.
@@ -50,11 +54,12 @@ A demonstração pública não é evidência de paridade do DashFinal: seus indi
 ## Paridade ainda não comprovada
 
 - ETL e semântica completa dos modelos BI 79/81;
-- faturamento diário com mediana;
 - TME por origem/coligada;
-- mapas, rankings e relatório detalhado por produto na nova UI;
+- mapas e relatório detalhado por produto na nova UI;
 - filtros combinados e valores padrão dos nove parâmetros;
 - comparação de resultados contra um snapshot controlado do PostgreSQL/Metabase real.
+
+A série diária e o ranking de clientes estão funcionais nativamente, mas continuam classificados como paridade parcial até a comparação de valores contra o Metabase/clone sanitizado. A consulta preserva o mesmo escopo de unidade e período já usado pela visão geral moderna, sem interpretar filtros adicionais que o modelo BI público não expõe.
 
 Esses itens permanecem como paridade parcial. O iframe legado não deve ser removido até os resultados serem comparados com fixtures sanitizadas.
 

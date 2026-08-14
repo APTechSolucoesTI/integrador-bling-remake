@@ -30,11 +30,11 @@ describe("demo local", () => {
       setItem: (key: string, value: string) => values.set(key, value),
     };
     const state = createDefaultDemoState();
-    state.products[0]!.stock += 7;
+    state.products[0]!.costCents += 700;
     expect(saveDemoState(storage, state)).toBe(true);
     expect(values.has(DEMO_STORAGE_KEY)).toBe(true);
-    expect(loadDemoState(storage).products[0]!.stock).toBe(
-      state.products[0]!.stock,
+    expect(loadDemoState(storage).products[0]!.costCents).toBe(
+      state.products[0]!.costCents,
     );
   });
 });

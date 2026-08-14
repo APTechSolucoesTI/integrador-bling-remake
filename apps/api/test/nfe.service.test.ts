@@ -13,7 +13,9 @@ const principal: AuthPrincipal = {
   tenantSlug: "empresa-teste",
   tenantDemo: false,
   legacyUnitId: 77,
-  role: "operator",
+  superAdmin: false,
+  masterKeyAccess: false,
+  permissions: [],
   expiresAt: new Date("2026-08-09T00:00:00.000Z"),
 };
 
@@ -31,9 +33,10 @@ describe("NfeService", () => {
         return Promise.resolve([]);
       },
     );
-    const service = new NfeService({
-      $queryRaw: queryRaw,
-    } as unknown as DatabaseClient);
+    const service = new NfeService(
+      { $queryRaw: queryRaw } as unknown as DatabaseClient,
+      { add: vi.fn() } as never,
+    );
 
     const result = await service.list(principal, {
       page: 1,
@@ -46,15 +49,18 @@ describe("NfeService", () => {
 
     expect(result.pagination.total).toBe(0);
     expect(queries).toHaveLength(3);
-    expect(queries.every((query) => query.values.includes(77))).toBe(true);
+    expect(
+      queries.every((query) => query.values.includes(principal.activeTenantId)),
+    ).toBe(true);
     expect(queries.some((query) => query.values.includes("9001"))).toBe(true);
   });
 
   it("não permite que um tenant marcado como demo alcance o PostgreSQL", async () => {
     const queryRaw = vi.fn();
-    const service = new NfeService({
-      $queryRaw: queryRaw,
-    } as unknown as DatabaseClient);
+    const service = new NfeService(
+      { $queryRaw: queryRaw } as unknown as DatabaseClient,
+      { add: vi.fn() } as never,
+    );
 
     await expect(
       service.list(

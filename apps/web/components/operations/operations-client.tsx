@@ -1,14 +1,12 @@
 "use client";
 
 import type {
-  MarketplaceFeeResponse,
   OperationsOverview,
   OperationsSettingsUpdate,
   SessionResponse,
 } from "@integrador/contracts";
 import {
   Activity,
-  Bell,
   Boxes,
   Building2,
   CheckCircle2,
@@ -16,22 +14,23 @@ import {
   ChevronDown,
   CircleDollarSign,
   Clock3,
+  CreditCard,
   FileText,
   Gauge,
   Goal,
-  HelpCircle,
   LoaderCircle,
   LogOut,
   Menu,
+  Orbit,
   MessageCircle,
   RefreshCw,
   Save,
   Settings,
   ShieldCheck,
   ShoppingBag,
+  Store,
   TriangleAlert,
   Users,
-  Workflow,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -40,14 +39,86 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
+import { ApplicationSidebar } from "../layout/application-sidebar";
+import { ApplicationHeaderActions } from "../layout/application-header-actions";
+import { ApplicationGlobalSearch } from "../layout/application-global-search";
+import { SmartCsvImportButton } from "../imports/smart-csv-import";
 import shell from "../nfe/nfe.module.css";
 import styles from "./operations.module.css";
+import { NfeSyncPolicyPanel } from "./nfe-sync-policy-panel";
 
 const integrationMeta = {
   bling: { name: "Bling v3", icon: Zap, tone: "green" },
   apchat: { name: "APChat", icon: MessageCircle, tone: "blue" },
   mercado_livre: { name: "Mercado Livre", icon: ShoppingBag, tone: "yellow" },
 } as const;
+
+type BlingSyncJobType =
+  | "bling.sync-nfe"
+  | "bling.sync-products"
+  | "bling.sync-sales-orders"
+  | "bling.sync-payment-methods"
+  | "bling.sync-sales-channels"
+  | "bling.sync-sellers"
+  | "bling.sync-operation-natures";
+
+const syncOptions: Array<{
+  jobType: BlingSyncJobType;
+  label: string;
+  description: string;
+  icon: typeof FileText;
+  needsPeriod: boolean;
+}> = [
+  {
+    jobType: "bling.sync-nfe",
+    label: "Notas fiscais",
+    description: "Importa NF-e emitidas no período informado.",
+    icon: FileText,
+    needsPeriod: true,
+  },
+  {
+    jobType: "bling.sync-sales-orders",
+    label: "Pedidos de venda",
+    description: "Importa pedidos criados no período informado.",
+    icon: ShoppingBag,
+    needsPeriod: true,
+  },
+  {
+    jobType: "bling.sync-products",
+    label: "Produtos",
+    description: "Atualiza a partir da última sincronização local.",
+    icon: Boxes,
+    needsPeriod: false,
+  },
+  {
+    jobType: "bling.sync-payment-methods",
+    label: "Formas de pagamento",
+    description: "Atualiza as formas cadastradas no Bling.",
+    icon: CreditCard,
+    needsPeriod: false,
+  },
+  {
+    jobType: "bling.sync-sales-channels",
+    label: "Canais de venda",
+    description: "Atualiza lojas e canais comerciais.",
+    icon: Store,
+    needsPeriod: false,
+  },
+  {
+    jobType: "bling.sync-sellers",
+    label: "Vendedores",
+    description: "Atualiza responsáveis comerciais.",
+    icon: Users,
+    needsPeriod: false,
+  },
+  {
+    jobType: "bling.sync-operation-natures",
+    label: "Naturezas de operação",
+    description: "Atualiza classificações fiscais do Bling.",
+    icon: FileText,
+    needsPeriod: false,
+  },
+];
 
 export function OperationsClient() {
   const router = useRouter();
@@ -59,10 +130,9 @@ export function OperationsClient() {
   const [saving, setSaving] = useState(false);
   const [queueingJob, setQueueingJob] = useState<string | null>(null);
   const [testingApchat, setTestingApchat] = useState(false);
-  const [marketplaceOrderId, setMarketplaceOrderId] = useState("");
-  const [marketplaceFee, setMarketplaceFee] = useState<string | null>(null);
-  const [loadingMarketplaceFee, setLoadingMarketplaceFee] = useState(false);
   const [syncPeriod, setSyncPeriod] = useState(initialSyncPeriod);
+  const [selectedSyncJob, setSelectedSyncJob] =
+    useState<BlingSyncJobType>("bling.sync-nfe");
   const [success, setSuccess] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -152,10 +222,7 @@ export function OperationsClient() {
     }
   }
 
-  async function enqueueBlingSync(
-    jobType:
-      "bling.sync-nfe" | "bling.sync-products" | "bling.sync-sales-orders",
-  ) {
+  async function enqueueBlingSync(jobType: BlingSyncJobType) {
     setQueueingJob(jobType);
     setError(null);
     setSuccess(null);
@@ -165,7 +232,13 @@ export function OperationsClient() {
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
-          jobType === "bling.sync-products"
+          [
+            "bling.sync-products",
+            "bling.sync-payment-methods",
+            "bling.sync-sales-channels",
+            "bling.sync-sellers",
+            "bling.sync-operation-natures",
+          ].includes(jobType)
             ? { jobType }
             : { jobType, from: syncPeriod.from, to: syncPeriod.to },
         ),
@@ -175,6 +248,10 @@ export function OperationsClient() {
         "bling.sync-nfe": "NF-e",
         "bling.sync-products": "produtos",
         "bling.sync-sales-orders": "pedidos de venda",
+        "bling.sync-payment-methods": "formas de pagamento",
+        "bling.sync-sales-channels": "canais de venda",
+        "bling.sync-sellers": "vendedores",
+        "bling.sync-operation-natures": "naturezas de operação",
       } as const;
       setSuccess(
         `Sincronização de ${labels[jobType]} adicionada à fila. O andamento já aparece abaixo.`,
@@ -222,29 +299,6 @@ export function OperationsClient() {
     }
   }
 
-  async function lookupMarketplaceFee() {
-    setLoadingMarketplaceFee(true);
-    setMarketplaceFee(null);
-    setError(null);
-    try {
-      const response = await fetch(
-        `${API_URL}/v1/integrations/mercado-livre/orders/${encodeURIComponent(marketplaceOrderId)}/fees`,
-        { credentials: "include" },
-      );
-      if (!response.ok) throw new Error(await responseMessage(response));
-      const result = (await response.json()) as MarketplaceFeeResponse;
-      setMarketplaceFee(result.fee);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Não foi possível consultar a tarifa do Mercado Livre.",
-      );
-    } finally {
-      setLoadingMarketplaceFee(false);
-    }
-  }
-
   if (!session && loading)
     return (
       <main className={shell.statePage}>
@@ -273,19 +327,26 @@ export function OperationsClient() {
 
   return (
     <main className={shell.shell}>
+      <ApplicationSidebar session={session} open={menuOpen} onLogout={logout} />
       <aside
+        hidden
+        style={{ display: "none" }}
         className={`${shell.sidebar} ${menuOpen ? shell.sidebarOpen : ""}`}
       >
         <Link className={shell.brand} href="/">
           <span>
-            <Workflow size={18} />
+            <Orbit size={18} />
           </span>
           <div>
             <strong>APBling</strong>
             <small>BLING OPERATIONS</small>
           </div>
         </Link>
-        <button className={shell.tenant} type="button" disabled>
+        <Link
+          className={shell.tenant}
+          href="/app/dashboard#organization"
+          title="Trocar organização"
+        >
           <span>
             <Building2 size={16} />
           </span>
@@ -294,7 +355,7 @@ export function OperationsClient() {
             <strong>{session.tenant.name}</strong>
           </div>
           <ChevronDown size={14} />
-        </button>
+        </Link>
         <nav className={shell.nav}>
           <p>OPERAÇÃO</p>
           <Link href="/app/dashboard">
@@ -333,7 +394,7 @@ export function OperationsClient() {
               <Building2 size={17} /> Empresas
             </Link>
           ) : null}
-          {session.role === "owner" || session.role === "admin" ? (
+          {session.permissions.includes("users:manage") ? (
             <Link href="/app/users">
               <ShieldCheck size={17} /> Usuários e acesso
             </Link>
@@ -343,9 +404,6 @@ export function OperationsClient() {
           </Link>
         </nav>
         <div className={shell.sidebarFooter}>
-          <span>
-            <HelpCircle size={16} /> Central de ajuda
-          </span>
           <button type="button" onClick={() => void logout()}>
             <LogOut size={16} /> Sair
           </button>
@@ -361,17 +419,8 @@ export function OperationsClient() {
           >
             <Menu size={20} />
           </button>
-          <div className={styles.topTitle}>
-            <Activity size={16} />
-            <span>Monitor operacional</span>
-          </div>
-          <span className={shell.dbBadge}>
-            <span className={styles.liveDot} /> Atualização sob demanda
-          </span>
-          <button className={shell.iconButton} type="button">
-            <Bell size={17} />
-          </button>
-          <div className={shell.avatar}>{initials(session.user.name)}</div>
+          <ApplicationGlobalSearch />
+          <ApplicationHeaderActions session={session} onLogout={logout} />
         </header>
 
         <div className={shell.content}>
@@ -379,20 +428,22 @@ export function OperationsClient() {
             <div>
               <span className={shell.eyebrow}>SAÚDE OPERACIONAL</span>
               <h1>Jobs e integrações</h1>
-              <p>
-                Conexões do legado, execuções BullMQ e eventos recentes por
-                empresa.
-              </p>
+              <p>Conexões, execuções BullMQ e eventos recentes por empresa.</p>
             </div>
-            <button
-              className={shell.refreshButton}
-              type="button"
-              onClick={() => void load()}
-              disabled={loading}
-            >
-              <RefreshCw className={loading ? shell.spin : ""} size={15} />{" "}
-              Atualizar estado
-            </button>
+            <div className={styles.titleActions}>
+              {session.permissions.includes("imports:manage") ? (
+                <SmartCsvImportButton onComplete={load} compact />
+              ) : null}
+              <button
+                className={shell.refreshButton}
+                type="button"
+                onClick={() => void load()}
+                disabled={loading}
+              >
+                <RefreshCw className={loading ? shell.spin : ""} size={15} />{" "}
+                Atualizar estado
+              </button>
+            </div>
           </section>
 
           <section className={styles.metrics}>
@@ -469,9 +520,8 @@ export function OperationsClient() {
                         <button
                           type="button"
                           disabled={
-                            !(
-                              session.role === "owner" ||
-                              session.role === "admin"
+                            !session.permissions.includes(
+                              "integrations:manage",
                             ) ||
                             !(integration.kind === "bling"
                               ? overview.configuration.authorization.bling
@@ -490,132 +540,30 @@ export function OperationsClient() {
             </div>
           </section>
 
-          <section className={styles.manualSync}>
-            <div>
-              <span>SINCRONIZAÇÃO SOB DEMANDA</span>
-              <h2>Atualizar dados operacionais do Bling</h2>
-              <p>
-                NF-e e pedidos respeitam o período selecionado. Produtos usam a
-                última atualização local com um dia de sobreposição, como no
-                legado. Tudo é persistido na unidade ativa.
-              </p>
-            </div>
-            <label>
-              <span>Data inicial</span>
-              <input
-                type="date"
-                value={syncPeriod.from}
-                onChange={(event) =>
-                  setSyncPeriod({ ...syncPeriod, from: event.target.value })
-                }
-              />
-            </label>
-            <label>
-              <span>Data final</span>
-              <input
-                type="date"
-                value={syncPeriod.to}
-                onChange={(event) =>
-                  setSyncPeriod({ ...syncPeriod, to: event.target.value })
-                }
-              />
-            </label>
-            <div className={styles.syncActions}>
-              <button
-                type="button"
-                disabled={
-                  Boolean(queueingJob) ||
-                  session.role === "viewer" ||
-                  !syncPeriod.from ||
-                  !syncPeriod.to
-                }
-                onClick={() => void enqueueBlingSync("bling.sync-nfe")}
-              >
-                {queueingJob === "bling.sync-nfe" ? (
-                  <LoaderCircle className={shell.spin} size={15} />
-                ) : (
-                  <FileText size={15} />
-                )}
-                Atualizar NF-e
-              </button>
-              <button
-                type="button"
-                disabled={Boolean(queueingJob) || session.role === "viewer"}
-                onClick={() => void enqueueBlingSync("bling.sync-products")}
-              >
-                {queueingJob === "bling.sync-products" ? (
-                  <LoaderCircle className={shell.spin} size={15} />
-                ) : (
-                  <Boxes size={15} />
-                )}
-                Atualizar produtos
-              </button>
-              <button
-                type="button"
-                disabled={
-                  Boolean(queueingJob) ||
-                  session.role === "viewer" ||
-                  !syncPeriod.from ||
-                  !syncPeriod.to
-                }
-                onClick={() => void enqueueBlingSync("bling.sync-sales-orders")}
-              >
-                {queueingJob === "bling.sync-sales-orders" ? (
-                  <LoaderCircle className={shell.spin} size={15} />
-                ) : (
-                  <ShoppingBag size={15} />
-                )}
-                Atualizar pedidos
-              </button>
-            </div>
-          </section>
+          <BlingSyncPanel
+            selectedJob={selectedSyncJob}
+            period={syncPeriod}
+            queueingJob={queueingJob}
+            canSync={session.permissions.includes("operations:manage")}
+            onSelect={setSelectedSyncJob}
+            onPeriodChange={setSyncPeriod}
+            onSync={enqueueBlingSync}
+          />
 
-          <section
-            className={`${styles.manualSync} ${styles.marketplaceLookup}`}
-          >
-            <div>
-              <span>MARKETPLACE EM TEMPO REAL</span>
-              <h2>Consultar tarifa da order</h2>
-              {marketplaceFee === null ? (
-                <p>
-                  Lê a order autenticada e prioriza a tarifa total informada
-                  pelo pagamento, com fallback para a tarifa unitária dos itens.
-                </p>
-              ) : (
-                <strong className={styles.feeResult}>
-                  Tarifa Mercado Livre: {money(marketplaceFee)}
-                </strong>
-              )}
-            </div>
-            <label>
-              <span>ID da order</span>
-              <input
-                inputMode="numeric"
-                value={marketplaceOrderId}
-                onChange={(event) =>
-                  setMarketplaceOrderId(event.target.value.replace(/\D/g, ""))
-                }
-                placeholder="2000003508419013"
-              />
-            </label>
-            <button
-              type="button"
-              disabled={loadingMarketplaceFee || !marketplaceOrderId}
-              onClick={() => void lookupMarketplaceFee()}
-            >
-              {loadingMarketplaceFee ? (
-                <LoaderCircle className={shell.spin} size={15} />
-              ) : (
-                <ShoppingBag size={15} />
-              )}
-              Consultar tarifa
-            </button>
-          </section>
+          {overview ? (
+            <NfeSyncPolicyPanel
+              initialPolicy={overview.configuration.nfeSyncPolicy}
+              options={overview.configuration.nfeSyncOptions}
+              canEdit={session.permissions.includes("operations:manage")}
+              saving={saving}
+              onSave={saveConfiguration}
+            />
+          ) : null}
 
           {overview ? (
             <OperationalSettings
               overview={overview}
-              canEdit={session.role === "owner" || session.role === "admin"}
+              canEdit={session.permissions.includes("integrations:manage")}
               saving={saving}
               testingApchat={testingApchat}
               onSave={saveConfiguration}
@@ -731,6 +679,132 @@ export function OperationsClient() {
   );
 }
 
+function BlingSyncPanel({
+  selectedJob,
+  period,
+  queueingJob,
+  canSync,
+  onSelect,
+  onPeriodChange,
+  onSync,
+}: {
+  selectedJob: BlingSyncJobType;
+  period: { from: string; to: string };
+  queueingJob: string | null;
+  canSync: boolean;
+  onSelect: (jobType: BlingSyncJobType) => void;
+  onPeriodChange: (period: { from: string; to: string }) => void;
+  onSync: (jobType: BlingSyncJobType) => Promise<void>;
+}) {
+  const selected = syncOptions.find(
+    (option) => option.jobType === selectedJob,
+  )!;
+  const SelectedIcon = selected.icon;
+  const missingPeriod = selected.needsPeriod && (!period.from || !period.to);
+
+  return (
+    <section className={styles.syncPanel} id="bling-sync">
+      <header className={styles.syncPanelHeader}>
+        <div>
+          <span>SINCRONIZAÇÃO SOB DEMANDA</span>
+          <h2>Escolha o que deseja atualizar</h2>
+          <p>
+            Selecione uma rotina. Período é solicitado somente para dados com
+            data de emissão ou criação.
+          </p>
+        </div>
+        <small>Dados gravados apenas na empresa ativa</small>
+      </header>
+
+      <div
+        className={styles.syncOptionGrid}
+        role="radiogroup"
+        aria-label="Dados para sincronizar"
+      >
+        {syncOptions.map((option) => {
+          const Icon = option.icon;
+          const selectedOption = option.jobType === selectedJob;
+          return (
+            <button
+              aria-checked={selectedOption}
+              className={`${styles.syncOption} ${selectedOption ? styles.syncOptionSelected : ""}`}
+              key={option.jobType}
+              role="radio"
+              type="button"
+              onClick={() => onSelect(option.jobType)}
+            >
+              <span>
+                <Icon size={17} />
+              </span>
+              <strong>{option.label}</strong>
+              <small>{option.description}</small>
+              {option.needsPeriod ? (
+                <em>Usa período</em>
+              ) : (
+                <em>Atualização incremental</em>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className={styles.syncSubmit}>
+        <div className={styles.syncSelection}>
+          <span>
+            <SelectedIcon size={17} />
+          </span>
+          <div>
+            <small>ROTINA SELECIONADA</small>
+            <strong>{selected.label}</strong>
+          </div>
+        </div>
+        {selected.needsPeriod ? (
+          <div className={styles.syncDates}>
+            <label>
+              <span>Data inicial</span>
+              <input
+                type="date"
+                value={period.from}
+                onChange={(event) =>
+                  onPeriodChange({ ...period, from: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              <span>Data final</span>
+              <input
+                type="date"
+                value={period.to}
+                onChange={(event) =>
+                  onPeriodChange({ ...period, to: event.target.value })
+                }
+              />
+            </label>
+          </div>
+        ) : (
+          <p className={styles.syncNoPeriod}>
+            Esta rotina usa última atualização local, com sobreposição segura
+            quando aplicável.
+          </p>
+        )}
+        <button
+          className={styles.syncSubmitButton}
+          disabled={Boolean(queueingJob) || !canSync || missingPeriod}
+          type="button"
+          onClick={() => void onSync(selectedJob)}
+        >
+          {queueingJob === selectedJob ? (
+            <LoaderCircle className={shell.spin} size={16} />
+          ) : (
+            <RefreshCw size={16} />
+          )}
+          Sincronizar {selected.label.toLowerCase()}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function Metric({
   icon,
   label,
@@ -769,12 +843,19 @@ function StatusIcon({
 function friendlyJob(type: string): string {
   const labels: Record<string, string> = {
     "bling.sync-nfe": "Sincronização de NF-e",
+    "bling.sync-cancelled-nfe": "Verificação de NF-e canceladas",
     "bling.sync-products": "Sincronização de produtos",
+    "bling.sync-payment-methods": "Sincronização de formas de pagamento",
+    "bling.sync-sales-channels": "Sincronização de canais de venda",
+    "bling.sync-sellers": "Sincronização de vendedores",
+    "bling.sync-operation-natures": "Sincronização de naturezas de operação",
     "bling.sync-sales-orders": "Sincronização de pedidos de venda",
     "bling.refresh-token": "Renovação do token Bling",
     "nfe.sync-details": "Atualização de documentos da NF-e",
+    "nfe.deliver": "Envio de NF-e pelo APChat",
     "nfe.process-xml": "Processamento de XML",
     "apchat.deliver": "Envio APChat",
+    "satisfaction.deliver": "Envio de pesquisas de satisfação",
     "goals.process-expired": "Processamento de metas",
   };
   return labels[type] ?? type;
@@ -820,14 +901,6 @@ function relativeTime(value: string): string {
   const hours = Math.max(0, Math.round(diff / 3_600_000));
   return hours < 24 ? `há ${hours}h` : `há ${Math.round(hours / 24)}d`;
 }
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part[0] ?? "")
-    .join("")
-    .toUpperCase();
-}
 async function responseMessage(response: Response): Promise<string> {
   const body = (await response.json().catch(() => null)) as {
     message?: string;
@@ -845,13 +918,6 @@ function localDate(value: Date): string {
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function money(value: string): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(Number(value));
 }
 
 function OperationalSettings({
@@ -1062,7 +1128,7 @@ function OperationalSettings({
             </span>
             <div>
               <h3>Pesquisa de satisfação</h3>
-              <p>Disparo após o envio, usando as variáveis do legado.</p>
+              <p>Disparo após o envio, usando a configuração da empresa.</p>
             </div>
           </header>
           <div className={styles.configForm}>

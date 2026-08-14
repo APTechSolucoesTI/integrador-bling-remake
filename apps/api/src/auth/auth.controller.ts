@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Patch,
   Post,
   Req,
   Res,
@@ -13,6 +14,9 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import {
   loginRequestSchema,
+  masterKeyLoginRequestSchema,
+  passwordChangeSchema,
+  userPreferencesUpdateSchema,
   type SessionResponse,
 } from "@integrador/contracts";
 import { AuthService } from "./auth.service.js";
@@ -38,6 +42,25 @@ export class AuthController {
     const result = await this.auth.login(
       parsed.data.email,
       parsed.data.password,
+    );
+    response.cookie(SESSION_COOKIE, result.token, cookieOptions());
+    return result.session;
+  }
+
+  @Post("masterkey")
+  @HttpCode(200)
+  async masterKeyLogin(
+    @Body() body: unknown,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<SessionResponse> {
+    assertTrustedOrigin(request);
+    const parsed = masterKeyLoginRequestSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException("Credenciais inválidas");
+    const result = await this.auth.masterKeyLogin(
+      parsed.data.email,
+      parsed.data.password,
+      request.ip ?? request.socket.remoteAddress ?? "unknown",
     );
     response.cookie(SESSION_COOKIE, result.token, cookieOptions());
     return result.session;
@@ -72,6 +95,33 @@ export class AuthController {
     const parsed = tenantSwitchSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException("Tenant inválido");
     await this.auth.switchTenant(request.auth, parsed.data.tenantId);
+  }
+
+  @Patch("password")
+  @HttpCode(204)
+  @UseGuards(SessionGuard)
+  async changePassword(
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<void> {
+    assertTrustedOrigin(request);
+    const parsed = passwordChangeSchema.safeParse(body);
+    if (!parsed.success)
+      throw new BadRequestException("Alteração de senha inválida");
+    await this.auth.changePassword(request.auth, parsed.data);
+  }
+
+  @Patch("preferences")
+  @UseGuards(SessionGuard)
+  async updatePreferences(
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<SessionResponse> {
+    assertTrustedOrigin(request);
+    const parsed = userPreferencesUpdateSchema.safeParse(body);
+    if (!parsed.success)
+      throw new BadRequestException("Preferências inválidas");
+    return this.auth.updatePreferences(request.auth, parsed.data);
   }
 }
 

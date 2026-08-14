@@ -1,0 +1,225 @@
+.topTitle,
+.titleActions,
+.dateRange,
+.dateRange legend,
+.pagination,
+.pagination div,
+.tableState {
+  display: flex;
+  align-items: center;
+}
+
+.topTitle {
+  gap: 7px;
+  color: #53655c;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.titleActions {
+  gap: 8px;
+}
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(350px, 1.8fr) auto;
+  gap: 9px;
+  align-items: end;
+}
+
+.dateRange {
+  min-width: 0;
+  height: 59px;
+  margin: 0;
+  padding: 4px 9px 8px;
+  border: 1px solid #dce4df;
+  border-radius: 10px;
+  gap: 7px;
+  background: #fff;
+}
+
+.dateRange legend {
+  padding: 0 4px;
+  gap: 5px;
+  color: #738279;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.45px;
+  text-transform: uppercase;
+}
+
+.dateRange input {
+  min-width: 0;
+  width: 100%;
+  height: 32px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 7px;
+  color: #263a2f;
+  background: #f6f9f7;
+  font: inherit;
+  font-size: 10px;
+}
+
+.dateRange span {
+  color: #849188;
+  font-size: 9px;
+}
+
+.reportBadge,
+.origin {
+  width: fit-content;
+  border-radius: 999px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.reportBadge {
+  padding: 5px 8px;
+  color: #27764b;
+  background: #edf8f1;
+  font-size: 7px;
+  letter-spacing: 0.4px;
+}
+
+.tableWrap {
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.tableWrap table {
+  width: 100%;
+  min-width: 1520px;
+  border-collapse: collapse;
+}
+
+.tableWrap th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e4e9e6;
+  color: #748279;
+  background: #f8faf9;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.34px;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tableWrap td {
+  padding: 12px;
+  border-bottom: 1px solid #edf0ee;
+  color: #34463c;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.tableWrap tbody tr:hover td {
+  background: #f8fcfa;
+}
+
+.customer {
+  max-width: 310px;
+  overflow: hidden;
+  color: #20352a !important;
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+.invoiceNumber {
+  color: #176a40;
+  font-variant-numeric: tabular-nums;
+}
+
+.origin {
+  padding: 4px 7px;
+  color: #2c6f4c;
+  background: #edf7f1;
+  font-size: 8px;
+}
+
+.numeric,
+.numericStrong {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.numericStrong {
+  color: #176a40 !important;
+  font-weight: 800;
+}
+
+.tableState {
+  height: 230px;
+  justify-content: center;
+  gap: 8px;
+  color: #7d8b83 !important;
+  text-align: center !important;
+}
+
+.pagination {
+  min-height: 54px;
+  padding: 10px 14px;
+  justify-content: space-between;
+  border-top: 1px solid #e6ebe8;
+  color: #758279;
+  font-size: 9px;
+}
+
+.pagination div {
+  gap: 6px;
+}
+
+.pagination button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #dce3df;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #315744;
+  background: #fff;
+  cursor: pointer;
+}
+
+.pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1180px) {
+  .filterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dateRange {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 680px) {
+  .titleActions {
+    width: 100%;
+  }
+
+  .titleActions button {
+    flex: 1;
+  }
+
+  .filterGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .dateRange {
+    grid-column: auto;
+    height: auto;
+    flex-wrap: wrap;
+  }
+
+  .dateRange input {
+    flex: 1 1 120px;
+  }
+}

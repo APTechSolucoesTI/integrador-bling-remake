@@ -1,71 +1,49 @@
-# Status da migração
+# Status da modernização
 
-Atualizado em: 2026-08-10
+Atualizado em: 2026-08-13
 
-## Direção atual
+## Produto implementado
 
-Conclusão funcional do produto APBling. Testes adicionais, E2E e validações de segurança foram conscientemente postergados para a próxima etapa a pedido do responsável pelo projeto.
+- Web Next.js, API NestJS e worker BullMQ no monorepo pnpm.
+- Landing, login, demo pública e áreas autenticadas de dashboard, NF-e, documentos, produtos, pessoas, comercial, fiscal, financeiro, metas, operações e administração.
+- Demo alinhada ao produto: entradas por sincronização, ações manipuláveis persistidas no navegador e nenhum efeito externo.
+- Sessão opaca, cookie HttpOnly, RBAC, memberships e isolamento por tenant UUID.
+- Sincronizações Bling de notas, detalhes, XML, documentos, produtos, pedidos e cadastros auxiliares.
+- Cálculo fiscal/financeiro decimal, normalização manual de itens, custos, impostos, créditos, lucro e margem.
+- OAuth Bling/Mercado Livre e APChat por empresa, com tokens/segredos cifrados por AES-256-GCM.
+- BullMQ com retry, backoff, tracking, idempotência e agenda operacional por empresa.
+- Exportações CSV, estados de carregamento/erro/vazio e demo responsiva.
+- Homologação Bling real concluída no tenant APTech: 5.430 produtos, 7 grupos de fabricação própria, 219 pedidos e 238 NF-e persistidos; 213 NF-e calculadas ponta a ponta.
+- Estrutura comercial ampliada com pedidos de venda e CRUD de setores.
+- Crédito de ICMS corrigido para `custo dos produtos × alíquota`; Lucro e Margem permite ressincronizar uma NF-e e recalcular a composição financeira.
+- Detalhe financeiro da NF-e expõe desconto, frete e outras despesas (`vOutro`) por item e destaca visualmente inconsistências de vínculo/cálculo.
+- Importação inteligente CSV disponível em Produtos, Pessoas, NF-e, Documentos, Comercial e Operações: detecta separador/codificação, sugere mapeamento por aliases, mostra prévia, valida campos e faz upsert tenant-aware em 12 cadastros Bling.
 
-## Produto já implementado
+## Banco independente concluído
 
-- Landing pública APBling, login do produto real e demonstração pública direta em `/demo`.
-- Demo totalmente frontend, sem autenticação, PostgreSQL ou integração externa, com mocks manipuláveis em `localStorage`.
-- Aplicação autenticada com dashboard analítico, seleção de período e pesquisa global.
-- Sessão persistida, papéis `owner/admin/operator/viewer`, troca autorizada de empresa e tenant obtido exclusivamente no servidor.
-- Control plane multiempresa, tela de organizações para superadmin e bootstrap idempotente do primeiro proprietário.
-- Administração de usuários, papéis, status, identidade da empresa, regime tributário e preferências.
-- Listagem e detalhe de NF-e com itens, memória financeira persistida, XML/PDF, boletos e rastreios.
-- Catálogos reais de produtos e pessoas, incluindo endereço principal e preferência de comunicação.
-- Hub de documentos, cadastros comerciais, custos/tributação, lucro/margem e metas.
-- CRUD tenant-aware de custos fixos/variáveis e associações de canais.
-- Criação, cancelamento e finalização de metas com as regras de duplicação do `MetaService.php`.
-- Configuração operacional de horários, APChat, pesquisa de satisfação e links de autorização.
-- Monitor unificado de BullMQ, `saas_audit_log` e `log_crontab`.
-- Sincronização manual de NF-e enfileirada: API registra a execução, BullMQ processa, Bling v3 é paginado e o PostgreSQL recebe upsert de NF-e, pessoas e endereços.
-- Enriquecimento individual de NF-e pelo worker com links XML/PDF, contato, boletos e até dois códigos de rastreio, sem recalcular os valores fiscais persistidos.
-- Sincronização produtiva de grupos de fabricação própria, produtos e pedidos de venda do Bling, com paginação, detalhes, atualização incremental e persistência nas tabelas legadas por unidade.
-- OAuth moderno completo de Bling e Mercado Livre: geração de `state`, callback server-to-server, persistência dos tokens por unidade e redirecionamento ao painel.
-- APChat produtivo enfileirado, com credenciais por empresa, número de homologação e confirmação de aceite no monitor operacional.
-- Consulta autenticada de tarifas de pedidos do Mercado Livre, incluindo renovação coordenada do token.
-- Worker com retry/backoff, atualização de tentativa/estado e deduplicação das situações 5/6 por número.
-- Monorepo Next.js/NestJS/BullMQ/Prisma/Zod preservando integralmente `legacy/`.
+- PostgreSQL próprio; o legado não participa do runtime.
+- Schema Prisma integral com control plane, domínio operacional, constraints, índices e relações tenant-aware.
+- Migration inicial única capaz de construir um banco vazio.
+- `invoice_overview` moderna substitui a dependência da antiga `view_nfe`.
+- Seed idempotente com tenant demo e configurações iniciais.
+- Importador legado somente leitura, com descoberta, checkpoints e primeiro estágio idempotente de tenants.
+- Mapa de todas as tabelas auditadas em `docs/legacy-to-modern-database-map.md`.
+- Bootstrap efêmero comprovado: migration, generate, seed, build, API, worker e web.
 
-## Dependências externas ainda necessárias para fechar a paridade integral
+## Validação atual
 
-- Credenciais reais de Bling, APChat e Mercado Livre por empresa para homologação externa.
-- PostgreSQL legado real ou clone sanitizado para confirmar diferenças do DDL em produção.
-- Download e parser moderno do conteúdo XML, itens fiscais e recomposição tributária/financeira; os links, boletos e rastreios já são adquiridos pelo processor moderno.
-- Orquestração automática de todas as recorrências do crontab legado e automação completa da pesquisa de satisfação por APChat.
-- Execução do PHP legado para gerar golden masters fiscais/financeiros.
+- Prisma validate: passou.
+- Typecheck de 7 projetos: passou.
+- Lint global: passou.
+- Testes: 55 passaram.
+- Build completo: passou, incluindo 19 rotas Next.js.
+- Bootstrap limpo em PostgreSQL 18 efêmero: passou.
+- Navegador integrado: indisponível no ambiente nesta execução; não há afirmação de QA visual novo.
+- Sincronização real Bling: produtos, pedidos e NF-e concluíram no worker; erros de enum PostgreSQL e regime tributário corrigidos.
 
-## Empacotamento executado neste checkpoint
+## Pendências externas
 
-- Dependências restauradas com o lockfile congelado e política de supply chain do pnpm aprovada.
-- Prisma Client 7.9.1 regenerado a partir do schema atual.
-- Builds TypeScript concluídos para `contracts`, `domain`, `integrations`, `db`, API NestJS e worker BullMQ, incluindo os novos synchronizers produtivos.
-- Build de produção do Next.js concluído com 18 rotas geradas e checagem TypeScript integrada.
-- Arquivos alterados formatados com Prettier.
-
-## Validações postergadas a pedido do responsável
-
-- Testes unitários e de integração adicionais para os novos fluxos.
-- E2E Playwright com PostgreSQL/Redis reais.
-- Revisão de segurança, rate limit de login, recuperação de senha/MFA e ensaio de rollback.
-
-A base anterior possuía 35 testes verdes e havia passado lint e smoke visual antes deste novo lote funcional. Esses testes não foram repetidos neste checkpoint; os resultados atuais de build acima cobrem apenas compilação e empacotamento.
-
-## Como provisionar o primeiro acesso
-
-Após aplicar a migration e compilar o monorepo, configure:
-
-```text
-APBLING_ADMIN_EMAIL
-APBLING_ADMIN_PASSWORD
-APBLING_ADMIN_NAME
-APBLING_TENANT_NAME
-APBLING_TENANT_SLUG
-APBLING_LEGACY_UNIT_ID
-APBLING_LEGACY_USER_ID
-```
-
-Execute `corepack pnpm bootstrap:admin`. O comando é idempotente, ativa o usuário, define-o como superadmin/proprietário e associa o tenant à unidade legada informada.
+- Instalar o peer `ioredis` usado pelo BullMQ. O registry npm deste ambiente está retornando certificado de outro domínio, então a instalação segura foi bloqueada; não foi desabilitada a validação TLS.
+- Homologar integrações com credenciais reais de Bling, APChat e Mercado Livre.
+- Habilitar transformadores restantes do importador apenas no ensaio de cutover com snapshot real/sanitizado.
+- Criar/aplicar as tabelas no Supabase somente na fase aprovada pelo responsável.

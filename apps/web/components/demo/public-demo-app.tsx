@@ -3,27 +3,33 @@
 import {
   Activity,
   ArrowLeft,
-  Bell,
   Boxes,
   Building2,
   Check,
   ChevronDown,
+  Clock3,
+  CircleDollarSign,
+  CreditCard,
   Database,
+  Download,
   FileText,
   Gauge,
   Goal,
   Link2,
   Menu,
-  Minus,
+  MessageSquareText,
   PackagePlus,
-  Plus,
+  Pencil,
+  Percent,
   ReceiptText,
   RefreshCw,
   RotateCcw,
   Search,
+  Send,
   ShieldCheck,
   Sparkles,
   Store,
+  Trash2,
   Truck,
   UserRoundCheck,
   Users,
@@ -35,23 +41,45 @@ import { useEffect, useMemo, useState } from "react";
 import {
   calculateDemoMetrics,
   createDefaultDemoState,
+  demoCustomerRanking,
+  demoDailyRevenue,
   demoMonthlySeries,
   loadDemoState,
   saveDemoState,
-  type DemoInvoiceStatus,
+  type DemoDeliveryStatus,
   type DemoState,
+  type DemoSyncKind,
+  type DemoSyncRun,
 } from "../../lib/demo-store";
 import styles from "./public-demo.module.css";
+import { downloadCsv } from "../../lib/csv";
 
 type DemoView =
-  "dashboard" | "invoices" | "products" | "people" | "goals" | "integrations";
+  | "dashboard"
+  | "invoices"
+  | "documents"
+  | "products"
+  | "people"
+  | "commercial"
+  | "fiscal"
+  | "finance"
+  | "marketplaceFees"
+  | "goals"
+  | "operations"
+  | "integrations";
 
 const navigation = [
   { id: "dashboard", label: "Visão geral", icon: Gauge },
   { id: "invoices", label: "Notas fiscais", icon: FileText },
+  { id: "documents", label: "Boletos e rastreio", icon: ReceiptText },
   { id: "products", label: "Produtos", icon: Boxes },
   { id: "people", label: "Pessoas", icon: Users },
+  { id: "commercial", label: "Cadastros comerciais", icon: Store },
+  { id: "fiscal", label: "Custos e tributação", icon: Percent },
+  { id: "finance", label: "Lucro e margem", icon: CircleDollarSign },
+  { id: "marketplaceFees", label: "Taxas Mercado Livre", icon: CreditCard },
   { id: "goals", label: "Metas", icon: Goal },
+  { id: "operations", label: "Sincronizações", icon: Activity },
   { id: "integrations", label: "Integrações", icon: Waypoints },
 ] as const;
 
@@ -67,23 +95,54 @@ const titles: Record<
   invoices: {
     eyebrow: "FISCAL",
     title: "Notas fiscais",
-    subtitle: "Busque, filtre, crie e altere o status das notas fictícias.",
+    subtitle: "Sincronize, ressincronize documentos e envie notas prontas.",
+  },
+  documents: {
+    eyebrow: "DOCUMENTOS",
+    title: "Boletos e rastreio",
+    subtitle:
+      "Documentos chegam pela sincronização das NF-e, sem cadastro manual.",
   },
   products: {
     eyebrow: "CATÁLOGO",
     title: "Produtos",
-    subtitle:
-      "Experimente ajustes de estoque que ficam salvos neste navegador.",
+    subtitle: "Consulte o catálogo e simule sua sincronização com o Bling.",
   },
   people: {
     eyebrow: "RELACIONAMENTO",
     title: "Pessoas",
-    subtitle: "Consulte clientes mockados e altere sua situação localmente.",
+    subtitle: "Consulte clientes e gerencie a preferência de mensagens.",
+  },
+  commercial: {
+    eyebrow: "REFERÊNCIAS DO BLING",
+    title: "Cadastros comerciais",
+    subtitle:
+      "Formas, canais, vendedores e naturezas sincronizados pelo gateway fake.",
+  },
+  fiscal: {
+    eyebrow: "REGRAS DA EMPRESA",
+    title: "Custos e tributação",
+    subtitle: "Custos editáveis usados no cálculo demonstrativo das NF-e.",
+  },
+  finance: {
+    eyebrow: "RENTABILIDADE",
+    title: "Custos, lucro e margem",
+    subtitle: "Cálculo demonstrativo reconstruído a partir dos itens da NF-e.",
+  },
+  marketplaceFees: {
+    eyebrow: "MARKETPLACE · TAXAS",
+    title: "Taxas Mercado Livre",
+    subtitle: "Comissão, frete e descontos por NF-e da operação demonstrativa.",
   },
   goals: {
     eyebrow: "PERFORMANCE",
     title: "Metas",
     subtitle: "Simule cenários mudando a meta comercial da demonstração.",
+  },
+  operations: {
+    eyebrow: "OPERAÇÃO",
+    title: "Sincronizações",
+    subtitle: "Simule as rotinas que importam dados do Bling para o APBling.",
   },
   integrations: {
     eyebrow: "CONEXÕES FAKE",
@@ -97,14 +156,40 @@ export function PublicDemoApp() {
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<DemoView>("dashboard");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<DemoInvoiceStatus | "Todos">(
-    "Todos",
-  );
+  const [statusFilter, setStatusFilter] = useState<
+    DemoDeliveryStatus | "Todos"
+  >("Todos");
+  const [feeFilters, setFeeFilters] = useState({
+    invoiceNumber: "",
+    origin: "",
+    from: "",
+    to: "",
+  });
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [syncPeriod, setSyncPeriod] = useState({
+    from: "2026-08-01",
+    to: "2026-08-10",
+  });
+  const [creditDraft, setCreditDraft] = useState({
+    id: "",
+    ncm: "",
+    rate: "",
+    reduction: "0",
+  });
+  const [fixedCostDraft, setFixedCostDraft] = useState({
+    id: "",
+    name: "",
+    value: "",
+    valueType: "P" as "F" | "P",
+    application: "Item" as "Item" | "Nota",
+  });
 
   useEffect(() => {
     setState(loadDemoState(window.localStorage));
+    const requestedView = window.location.hash.slice(1);
+    if (navigation.some(({ id }) => id === requestedView))
+      setView(requestedView as DemoView);
     setReady(true);
   }, []);
 
@@ -120,10 +205,12 @@ export function PublicDemoApp() {
 
   const metrics = useMemo(() => calculateDemoMetrics(state), [state]);
   const series = useMemo(() => demoMonthlySeries(state), [state]);
+  const dailyRevenue = useMemo(() => demoDailyRevenue(state), [state]);
+  const customerRanking = useMemo(() => demoCustomerRanking(state), [state]);
   const normalizedSearch = search.trim().toLocaleLowerCase("pt-BR");
   const filteredInvoices = state.invoices.filter(
     (item) =>
-      (statusFilter === "Todos" || item.status === statusFilter) &&
+      (statusFilter === "Todos" || item.deliveryStatus === statusFilter) &&
       (!normalizedSearch ||
         [item.number, item.customer, item.channel].some((value) =>
           value.toLocaleLowerCase("pt-BR").includes(normalizedSearch),
@@ -143,6 +230,32 @@ export function PublicDemoApp() {
         value.toLocaleLowerCase("pt-BR").includes(normalizedSearch),
       ),
   );
+  const marketplaceFeeRows = state.invoices
+    .filter((invoice) => invoice.channel === "Mercado Livre")
+    .map((invoice, index) => {
+      const commissionRate = [13, 11.99, 8.92][index % 3] ?? 13;
+      const freightCents = [2365, 1845, 1235][index % 3] ?? 0;
+      return {
+        ...invoice,
+        commissionRate,
+        commissionCents: Math.round(
+          (invoice.valueCents * commissionRate) / 100,
+        ),
+        freightCents,
+        freightRate:
+          invoice.valueCents === 0
+            ? 0
+            : (freightCents / invoice.valueCents) * 100,
+      };
+    })
+    .filter(
+      (invoice) =>
+        (!feeFilters.invoiceNumber ||
+          invoice.number === feeFilters.invoiceNumber) &&
+        (!feeFilters.origin || invoice.channel === feeFilters.origin) &&
+        (!feeFilters.from || invoice.issuedAt >= feeFilters.from) &&
+        (!feeFilters.to || invoice.issuedAt <= feeFilters.to),
+    );
 
   function updateState(
     change: (current: DemoState) => DemoState,
@@ -157,61 +270,467 @@ export function PublicDemoApp() {
 
   function changeView(nextView: DemoView) {
     setView(nextView);
+    window.history.replaceState(null, "", `#${nextView}`);
     setSearch("");
     setMenuOpen(false);
   }
 
-  function changeInvoiceStatus(id: string, status: DemoInvoiceStatus) {
+  function simulateNfeSync() {
+    if (!syncPeriod.from || !syncPeriod.to) {
+      setToast("Informe as datas inicial e final da sincronização.");
+      return;
+    }
+    if (syncPeriod.from > syncPeriod.to) {
+      setToast("A data inicial deve ser anterior à data final.");
+      return;
+    }
+    if (!state.integrations.bling) {
+      setToast("Ative a integração Bling da demo antes de sincronizar.");
+      return;
+    }
+    const syncedId = `sync-${syncPeriod.from}-${syncPeriod.to}`;
+    updateState((current) => {
+      const alreadyImported = current.invoices.some(
+        (invoice) => invoice.id === syncedId,
+      );
+      const sequence =
+        Math.max(
+          ...current.invoices.map((item) => Number(item.number)),
+          10_176,
+        ) + 1;
+      const invoices = alreadyImported
+        ? current.invoices
+        : [
+            {
+              id: syncedId,
+              number: String(sequence).padStart(9, "0"),
+              customer: "Distribuidora Vale Verde",
+              channel: "Bling",
+              issuedAt: syncPeriod.to,
+              valueCents: 247_850,
+              costCents: 131_400,
+              baseCostCents: 131_400,
+              taxCents: 27_260,
+              status: "Autorizada" as const,
+              deliveryStatus: "Pronto para envio" as const,
+              hasBoleto: true,
+              hasTracking: false,
+              unlinkedItemCode: null,
+            },
+            ...current.invoices,
+          ];
+      const processed = invoices.filter(
+        (invoice) =>
+          invoice.issuedAt >= syncPeriod.from &&
+          invoice.issuedAt <= syncPeriod.to,
+      ).length;
+      return {
+        ...current,
+        invoices,
+        syncRuns: [
+          createSyncRun("nfe", processed, syncPeriod.from, syncPeriod.to),
+          ...current.syncRuns,
+        ].slice(0, 12),
+      };
+    }, "Sincronização simulada concluída sem duplicar NF-e importadas.");
+  }
+
+  function simulateProductSync() {
+    if (!state.integrations.bling) {
+      setToast("Ative a integração Bling da demo antes de sincronizar.");
+      return;
+    }
+    const synchronizedCosts = [2_940, 14_650, 9_580, 7_920, 18_740, 21_650];
+    updateState(
+      (current) => ({
+        ...current,
+        products: current.products.map((item, index) => ({
+          ...item,
+          costCents: synchronizedCosts[index] ?? item.costCents,
+        })),
+        syncRuns: [
+          createSyncRun("products", current.products.length),
+          ...current.syncRuns,
+        ].slice(0, 12),
+      }),
+      "Catálogo e custos sincronizados com o gateway fake.",
+    );
+  }
+
+  function simulateReferenceSync(
+    kind:
+      "payment-methods" | "sales-channels" | "sellers" | "operation-natures",
+  ) {
+    if (!state.integrations.bling) {
+      setToast("Ative a integração Bling da demo antes de sincronizar.");
+      return;
+    }
+    const processed =
+      kind === "payment-methods" ? 8 : kind === "sales-channels" ? 4 : 2;
+    const labels = {
+      "payment-methods": "Formas de pagamento",
+      "sales-channels": "Canais de venda",
+      sellers: "Vendedores",
+      "operation-natures": "Naturezas de operação",
+    } as const;
+    updateState(
+      (current) => ({
+        ...current,
+        syncRuns: [createSyncRun(kind, processed), ...current.syncRuns].slice(
+          0,
+          12,
+        ),
+      }),
+      `${labels[kind]} sincronizados com o gateway fake.`,
+    );
+  }
+
+  function simulateScheduledCycle() {
+    if (!state.integrations.bling) {
+      setToast("Ative a integração Bling da demo antes de executar o ciclo.");
+      return;
+    }
+    const now = new Date().toISOString();
+    updateState(
+      (current) => {
+        const shouldDeliver =
+          current.automation.autoDelivery && current.integrations.apchat;
+        const ready = current.invoices.filter(
+          (invoice) => invoice.deliveryStatus === "Pronto para envio",
+        ).length;
+        const runs: DemoSyncRun[] = [
+          {
+            id: `scheduled-${now}`,
+            kind: "scheduled-cycle",
+            from: syncPeriod.from,
+            to: syncPeriod.to,
+            processed: current.invoices.length,
+            createdAt: now,
+          },
+          ...(current.automation.satisfactionEnabled
+            ? [
+                {
+                  id: `satisfaction-${now}`,
+                  kind: "satisfaction" as const,
+                  from: null,
+                  to: null,
+                  processed: shouldDeliver ? ready : 0,
+                  createdAt: now,
+                },
+              ]
+            : []),
+        ];
+        return {
+          ...current,
+          invoices: shouldDeliver
+            ? current.invoices.map((invoice) =>
+                invoice.deliveryStatus === "Pronto para envio"
+                  ? { ...invoice, deliveryStatus: "Enviado" as const }
+                  : invoice,
+              )
+            : current.invoices,
+          syncRuns: [...runs, ...current.syncRuns].slice(0, 12),
+        };
+      },
+      state.automation.autoDelivery && !state.integrations.apchat
+        ? "Ciclo executado; envios aguardam a ativação fake do APChat."
+        : "Ciclo automático executado no ambiente demonstrativo.",
+    );
+  }
+
+  function saveNcmCredit() {
+    const ncm = creditDraft.ncm.replace(/\D/g, "");
+    const rate = Number(creditDraft.rate.replace(",", "."));
+    const reduction = Number(creditDraft.reduction.replace(",", "."));
+    if (
+      ncm.length !== 8 ||
+      !Number.isFinite(rate) ||
+      !Number.isFinite(reduction)
+    ) {
+      setToast("Informe NCM, alíquota e redução válidos.");
+      return;
+    }
+    updateState(
+      (current) => ({
+        ...current,
+        ncmCredits: creditDraft.id
+          ? current.ncmCredits.map((credit) =>
+              credit.id === creditDraft.id
+                ? { ...credit, ncm, rate, reduction }
+                : credit,
+            )
+          : [
+              ...current.ncmCredits,
+              { id: `ncm-${ncm}-${Date.now()}`, ncm, rate, reduction },
+            ],
+      }),
+      "Crédito de ICMS por NCM salvo na demonstração.",
+    );
+    setCreditDraft({ id: "", ncm: "", rate: "", reduction: "0" });
+  }
+
+  function saveFixedCost() {
+    const value = Number(fixedCostDraft.value.replace(",", "."));
+    if (!fixedCostDraft.name.trim() || !Number.isFinite(value) || value < 0) {
+      setToast("Informe nome e valor válidos para o custo.");
+      return;
+    }
+    updateState(
+      (current) => ({
+        ...current,
+        fixedCosts: fixedCostDraft.id
+          ? current.fixedCosts.map((cost) =>
+              cost.id === fixedCostDraft.id
+                ? {
+                    ...cost,
+                    name: fixedCostDraft.name.trim(),
+                    value,
+                    valueType: fixedCostDraft.valueType,
+                    application: fixedCostDraft.application,
+                  }
+                : cost,
+            )
+          : [
+              ...current.fixedCosts,
+              {
+                id: `cost-${Date.now()}`,
+                name: fixedCostDraft.name.trim(),
+                value,
+                valueType: fixedCostDraft.valueType,
+                application: fixedCostDraft.application,
+                channels: [],
+              },
+            ],
+      }),
+      fixedCostDraft.id
+        ? "Custo atualizado na demonstração."
+        : "Custo adicionado à demonstração.",
+    );
+    setFixedCostDraft({
+      id: "",
+      name: "",
+      value: "",
+      valueType: "P",
+      application: "Item",
+    });
+  }
+
+  function deleteFixedCost(id: string, name: string) {
+    if (!window.confirm(`Excluir custo ${name}?`)) return;
+    updateState(
+      (current) => ({
+        ...current,
+        fixedCosts: current.fixedCosts.filter((cost) => cost.id !== id),
+      }),
+      `Custo ${name} excluído da demonstração.`,
+    );
+    if (fixedCostDraft.id === id)
+      setFixedCostDraft({
+        id: "",
+        name: "",
+        value: "",
+        valueType: "P",
+        application: "Item",
+      });
+  }
+
+  function deleteNcmCredit(id: string, ncm: string) {
+    if (!window.confirm(`Excluir crédito do NCM ${ncm}?`)) return;
+    updateState(
+      (current) => ({
+        ...current,
+        ncmCredits: current.ncmCredits.filter((credit) => credit.id !== id),
+      }),
+      `Crédito do NCM ${ncm} excluído da demonstração.`,
+    );
+    if (creditDraft.id === id)
+      setCreditDraft({ id: "", ncm: "", rate: "", reduction: "0" });
+  }
+
+  function exportDemoView() {
+    if (view === "marketplaceFees") {
+      downloadCsv(
+        "demo-taxas-mercado-livre",
+        [
+          "Número NF",
+          "Coligada",
+          "Origem",
+          "Cliente",
+          "Data Emissão",
+          "Valor",
+          "Valor Comissão",
+          "Percentual Comissão",
+          "Valor Frete",
+          "Percentual Frete",
+          "Valor Desconto",
+        ],
+        marketplaceFeeRows.map((invoice) => [
+          invoice.number,
+          "APTech Demo",
+          invoice.channel,
+          invoice.customer,
+          invoice.issuedAt,
+          money(invoice.valueCents),
+          money(invoice.commissionCents),
+          `${invoice.commissionRate.toLocaleString("pt-BR")}%`,
+          money(invoice.freightCents),
+          `${invoice.freightRate.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`,
+          money(0),
+        ]),
+      );
+      return;
+    }
+    if (view === "products") {
+      downloadCsv(
+        "demo-produtos",
+        ["SKU", "Nome", "NCM", "Custo", "Fabricação própria", "Situação"],
+        filteredProducts.map((product) => [
+          product.sku,
+          product.name,
+          product.ncm,
+          money(product.costCents),
+          product.ownManufacture ? "Sim" : "Não",
+          product.active ? "Ativo" : "Inativo",
+        ]),
+      );
+      return;
+    }
+    if (view === "people") {
+      downloadCsv(
+        "demo-pessoas",
+        ["Nome", "Cidade", "UF", "Pedidos", "Total", "Mensagens"],
+        filteredPeople.map((person) => [
+          person.name,
+          person.city,
+          person.state,
+          person.orders,
+          money(person.totalCents),
+          person.messagingDisabled ? "Desabilitadas" : "Habilitadas",
+        ]),
+      );
+      return;
+    }
+    downloadCsv(
+      view === "finance"
+        ? "demo-rentabilidade"
+        : view === "documents"
+          ? "demo-documentos"
+          : "demo-nfe",
+      [
+        "NF-e",
+        "Cliente",
+        "Canal",
+        "Emissão",
+        "Venda",
+        "Custo",
+        "Impostos",
+        "Lucro",
+        "Status fiscal",
+        "Status de envio",
+      ],
+      filteredInvoices.map((invoice) => [
+        invoice.number,
+        invoice.customer,
+        invoice.channel,
+        invoice.issuedAt,
+        money(invoice.valueCents),
+        money(invoice.costCents),
+        money(invoice.taxCents),
+        money(invoice.valueCents - invoice.costCents - invoice.taxCents),
+        invoice.status,
+        invoice.deliveryStatus,
+      ]),
+    );
+  }
+
+  function simulateInvoiceResync(id: string) {
+    if (!state.integrations.bling) {
+      setToast("Ative a integração Bling da demo antes de ressincronizar.");
+      return;
+    }
+    updateState(
+      (current) => ({
+        ...current,
+        invoices: current.invoices.map((invoice) => {
+          if (invoice.id !== id) return invoice;
+          const configuredCost = current.fixedCosts
+            .filter(
+              (cost) =>
+                cost.channels.length === 0 ||
+                cost.channels.includes(invoice.channel),
+            )
+            .reduce(
+              (total, cost) =>
+                total +
+                (cost.valueType === "P"
+                  ? Math.round((invoice.valueCents * cost.value) / 100)
+                  : Math.round(cost.value * 100)),
+              0,
+            );
+          return {
+            ...invoice,
+            costCents: invoice.baseCostCents + configuredCost,
+            hasBoleto: true,
+            hasTracking: true,
+          };
+        }),
+        syncRuns: [createSyncRun("nfe-details", 1), ...current.syncRuns].slice(
+          0,
+          12,
+        ),
+      }),
+      "Documentos e custos da NF-e foram ressincronizados e recalculados.",
+    );
+  }
+
+  function simulateInvoiceSend(id: string) {
+    if (!state.integrations.apchat) {
+      setToast("Ative a integração APChat da demo antes de enviar.");
+      return;
+    }
+    const invoice = state.invoices.find((item) => item.id === id);
+    if (invoice?.deliveryStatus !== "Pronto para envio") {
+      setToast("Apenas NF-e prontas podem ser enviadas.");
+      return;
+    }
     updateState(
       (current) => ({
         ...current,
         invoices: current.invoices.map((item) =>
-          item.id === id ? { ...item, status } : item,
+          item.id === id ? { ...item, deliveryStatus: "Enviado" } : item,
+        ),
+        syncRuns: [createSyncRun("nfe-delivery", 1), ...current.syncRuns].slice(
+          0,
+          12,
         ),
       }),
-      "Status da NF-e salvo neste navegador.",
+      "NF-e enviada pelo gateway fake do APChat.",
     );
   }
 
-  function addInvoice() {
-    const sequence =
-      Math.max(...state.invoices.map((item) => Number(item.number)), 10_176) +
-      1;
+  function simulateInvoiceNormalization(id: string) {
+    const invoice = state.invoices.find((item) => item.id === id);
+    if (!invoice?.unlinkedItemCode) {
+      setToast("Esta NF-e não possui item pendente de normalização.");
+      return;
+    }
+    const product = state.products.find((item) => item.sku === "HUB-USB-8P");
+    if (!product) {
+      setToast("Sincronize o catálogo antes de normalizar o item.");
+      return;
+    }
     updateState(
       (current) => ({
         ...current,
-        invoices: [
-          {
-            id: `local-${sequence}`,
-            number: String(sequence).padStart(9, "0"),
-            customer: "Novo cliente demonstrativo",
-            channel: "Bling",
-            issuedAt: "2026-08-08",
-            valueCents: 159_900,
-            costCents: 82_400,
-            taxCents: 17_590,
-            status: "Pendente",
-            hasBoleto: false,
-            hasTracking: false,
-          },
-          ...current.invoices,
-        ],
-      }),
-      "Nova NF-e fictícia criada.",
-    );
-  }
-
-  function adjustStock(id: string, amount: number) {
-    updateState(
-      (current) => ({
-        ...current,
-        products: current.products.map((item) =>
-          item.id === id
-            ? { ...item, stock: Math.max(0, item.stock + amount) }
-            : item,
+        invoices: current.invoices.map((item) =>
+          item.id === id ? { ...item, unlinkedItemCode: null } : item,
         ),
+        syncRuns: [
+          createSyncRun("nfe-normalization", 1),
+          ...current.syncRuns,
+        ].slice(0, 12),
       }),
-      "Estoque atualizado localmente.",
+      `Item vinculado ao produto ${product.sku}; recálculo fake concluído.`,
     );
   }
 
@@ -235,6 +754,12 @@ export function PublicDemoApp() {
 
   const heading = titles[view];
   const maxRevenue = Math.max(...series.map((item) => item.revenueCents), 1);
+  const maxDailyRevenue = Math.max(
+    ...dailyRevenue.points.map((item) => item.revenueCents),
+    dailyRevenue.medianCents,
+    1,
+  );
+  const maxCustomerRevenue = Math.max(customerRanking[0]?.revenueCents ?? 0, 1);
 
   return (
     <main className={styles.shell}>
@@ -335,10 +860,6 @@ export function PublicDemoApp() {
             <span>
               <i /> Auto-salvo
             </span>
-            <button type="button" aria-label="Notificações demonstrativas">
-              <Bell size={18} />
-              <i />
-            </button>
             <div>AD</div>
           </div>
         </header>
@@ -354,20 +875,36 @@ export function PublicDemoApp() {
               <button
                 className={styles.primaryAction}
                 type="button"
-                onClick={addInvoice}
+                onClick={() => changeView("operations")}
               >
-                <Plus size={16} /> Nova NF-e mock
+                <RefreshCw size={16} /> Sincronizar NF-e
               </button>
             ) : null}
             {view === "dashboard" ? (
               <button
                 className={styles.secondaryAction}
                 type="button"
-                onClick={() =>
-                  setToast("Os dados já estão atualizados no localStorage.")
-                }
+                onClick={() => changeView("operations")}
               >
-                <RefreshCw size={15} /> Atualizar visão
+                <RefreshCw size={15} /> Sincronizar dados
+              </button>
+            ) : null}
+            {(
+              [
+                "invoices",
+                "documents",
+                "products",
+                "people",
+                "finance",
+                "marketplaceFees",
+              ] as DemoView[]
+            ).includes(view) ? (
+              <button
+                className={styles.secondaryAction}
+                type="button"
+                onClick={exportDemoView}
+              >
+                <Download size={15} /> Exportar CSV
               </button>
             ) : null}
           </div>
@@ -393,13 +930,13 @@ export function PublicDemoApp() {
                 <Metric
                   label="NF-e autorizadas"
                   value={String(metrics.authorizedInvoices)}
-                  detail="Status manipulável"
+                  detail="Status importado do Bling"
                   tone="blue"
                 />
                 <Metric
-                  label="Estoque baixo"
-                  value={String(metrics.lowStockProducts)}
-                  detail="Produtos no mínimo"
+                  label="Produtos sincronizados"
+                  value={String(metrics.synchronizedProducts)}
+                  detail="Cadastro importado do Bling"
                   tone="amber"
                 />
               </section>
@@ -474,10 +1011,65 @@ export function PublicDemoApp() {
                   </div>
                 </article>
               </section>
+              <section className={styles.insightGrid}>
+                <article className={`${styles.panel} ${styles.dailyPanel}`}>
+                  <PanelHead
+                    title="Faturamento diário"
+                    subtitle={`Mediana dos dias faturados: ${money(dailyRevenue.medianCents)}`}
+                  />
+                  <div
+                    className={styles.dailyChart}
+                    aria-label="Faturamento diário da demonstração"
+                  >
+                    {dailyRevenue.points.map((item) => (
+                      <div
+                        className={styles.dailyBar}
+                        key={item.date}
+                        title={`${demoDate(item.date)}: ${money(item.revenueCents)} em ${item.invoices} notas`}
+                      >
+                        <i
+                          style={{
+                            height: `${Math.max(5, (item.revenueCents / maxDailyRevenue) * 100)}%`,
+                          }}
+                        />
+                        <small>{shortDemoDate(item.date)}</small>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+                <article className={`${styles.panel} ${styles.customerPanel}`}>
+                  <PanelHead
+                    title="Clientes por faturamento"
+                    subtitle="Atualizado pelas NF-e não canceladas"
+                  />
+                  <div className={styles.customerRanking}>
+                    {customerRanking.map((customer) => (
+                      <div key={customer.name}>
+                        <span>
+                          <strong>{customer.name}</strong>
+                          <small>
+                            {customer.invoices} notas · lucro{" "}
+                            {money(customer.profitCents)} · ticket{" "}
+                            {money(customer.averageTicketCents)}
+                          </small>
+                        </span>
+                        <b>{money(customer.revenueCents)}</b>
+                        <i>
+                          <em
+                            style={{
+                              width: `${Math.max((customer.revenueCents / maxCustomerRevenue) * 100, 3)}%`,
+                            }}
+                          />
+                        </i>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              </section>
               <article className={`${styles.panel} ${styles.tablePanel}`}>
                 <PanelHead
                   title="Notas fiscais recentes"
-                  subtitle="Clique em Notas fiscais para manipular os registros"
+                  subtitle="Consulte as notas e ressincronize seus documentos"
                   action={
                     <button
                       type="button"
@@ -487,11 +1079,7 @@ export function PublicDemoApp() {
                     </button>
                   }
                 />
-                <InvoiceTable
-                  invoices={state.invoices.slice(0, 5)}
-                  onStatusChange={changeInvoiceStatus}
-                  compact
-                />
+                <InvoiceTable invoices={state.invoices.slice(0, 5)} compact />
               </article>
             </>
           ) : null}
@@ -503,10 +1091,10 @@ export function PublicDemoApp() {
                   {(
                     [
                       "Todos",
-                      "Autorizada",
-                      "Pendente",
-                      "Em processamento",
-                      "Cancelada",
+                      "Erro",
+                      "Pronto para envio",
+                      "Enviado",
+                      "Mercado livre",
                     ] as const
                   ).map((status) => (
                     <button
@@ -527,14 +1115,71 @@ export function PublicDemoApp() {
               </div>
               <InvoiceTable
                 invoices={filteredInvoices}
-                onStatusChange={changeInvoiceStatus}
+                onResync={simulateInvoiceResync}
+                onSend={simulateInvoiceSend}
+                onNormalize={simulateInvoiceNormalization}
               />
               {filteredInvoices.length === 0 ? (
                 <EmptyState
                   title="Nenhuma NF-e encontrada"
-                  text="Mude os filtros ou crie uma nova nota fictícia."
+                  text="Mude os filtros ou execute uma sincronização por período."
                 />
               ) : null}
+            </article>
+          ) : null}
+
+          {view === "documents" ? (
+            <article className={`${styles.panel} ${styles.listPanel}`}>
+              <div className={styles.listSummary}>
+                <span>
+                  <ReceiptText size={17} /> Documentos vinculados às NF-e
+                </span>
+                <small>
+                  Ressincronize para buscar boleto e rastreio no Bling.
+                </small>
+              </div>
+              <div className={styles.tableWrap}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>NF-e</th>
+                      <th>Cliente</th>
+                      <th>Boleto</th>
+                      <th>Rastreio</th>
+                      <th>Status de envio</th>
+                      <th>Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.invoices.map((invoice) => (
+                      <tr key={invoice.id}>
+                        <td>
+                          <strong>{invoice.number}</strong>
+                        </td>
+                        <td>{invoice.customer}</td>
+                        <td>
+                          {invoice.hasBoleto ? "Disponível" : "Não localizado"}
+                        </td>
+                        <td>
+                          {invoice.hasTracking
+                            ? "Disponível"
+                            : "Não localizado"}
+                        </td>
+                        <td>{invoice.deliveryStatus}</td>
+                        <td>
+                          <button
+                            className={styles.rowAction}
+                            type="button"
+                            onClick={() => simulateInvoiceResync(invoice.id)}
+                          >
+                            <RefreshCw size={13} /> Atualizar documentos
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </article>
           ) : null}
 
@@ -543,9 +1188,11 @@ export function PublicDemoApp() {
               <div className={styles.listSummary}>
                 <span>
                   <PackagePlus size={17} /> {state.products.length} produtos
-                  fictícios
+                  sincronizados
                 </span>
-                <small>Use + e − para movimentar o estoque.</small>
+                <button type="button" onClick={simulateProductSync}>
+                  <RefreshCw size={14} /> Sincronizar produtos
+                </button>
               </div>
               <div className={styles.tableWrap}>
                 <table>
@@ -553,10 +1200,10 @@ export function PublicDemoApp() {
                     <tr>
                       <th>Produto</th>
                       <th>SKU</th>
-                      <th>Preço</th>
-                      <th>Mínimo</th>
-                      <th>Estoque atual</th>
-                      <th>Ajustar</th>
+                      <th>NCM</th>
+                      <th>Custo</th>
+                      <th>Fabricação própria</th>
+                      <th>Situação</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -574,37 +1221,20 @@ export function PublicDemoApp() {
                           <code>{product.sku}</code>
                         </td>
                         <td>
-                          <strong>{money(product.priceCents)}</strong>
+                          <code>{product.ncm}</code>
                         </td>
-                        <td>{product.minimumStock}</td>
+                        <td>
+                          <strong>{money(product.costCents)}</strong>
+                        </td>
+                        <td>{product.ownManufacture ? "Sim" : "Não"}</td>
                         <td>
                           <span
                             className={
-                              product.stock <= product.minimumStock
-                                ? styles.stockLow
-                                : styles.stockOk
+                              product.active ? styles.stockOk : styles.stockLow
                             }
                           >
-                            {product.stock} un.
+                            {product.active ? "Ativo" : "Inativo"}
                           </span>
-                        </td>
-                        <td>
-                          <div className={styles.stepper}>
-                            <button
-                              type="button"
-                              onClick={() => adjustStock(product.id, -1)}
-                              aria-label={`Diminuir estoque de ${product.name}`}
-                            >
-                              <Minus size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => adjustStock(product.id, 1)}
-                              aria-label={`Aumentar estoque de ${product.name}`}
-                            >
-                              <Plus size={14} />
-                            </button>
-                          </div>
                         </td>
                       </tr>
                     ))}
@@ -620,7 +1250,9 @@ export function PublicDemoApp() {
                 <span>
                   <UserRoundCheck size={17} /> Base de clientes demonstrativa
                 </span>
-                <small>Alternar situação salva a mudança localmente.</small>
+                <small>
+                  Preferência de mensagens editável como no produto.
+                </small>
               </div>
               <div className={styles.peopleGrid}>
                 {filteredPeople.map((person) => (
@@ -646,7 +1278,9 @@ export function PublicDemoApp() {
                     </dl>
                     <button
                       className={
-                        person.active ? styles.enabled : styles.disabled
+                        person.messagingDisabled
+                          ? styles.disabled
+                          : styles.enabled
                       }
                       type="button"
                       onClick={() =>
@@ -655,22 +1289,499 @@ export function PublicDemoApp() {
                             ...current,
                             people: current.people.map((item) =>
                               item.id === person.id
-                                ? { ...item, active: !item.active }
+                                ? {
+                                    ...item,
+                                    messagingDisabled: !item.messagingDisabled,
+                                  }
                                 : item,
                             ),
                           }),
-                          person.active
-                            ? "Cliente desativado na demo."
-                            : "Cliente reativado na demo.",
+                          person.messagingDisabled
+                            ? "Mensagens habilitadas para o contato."
+                            : "Mensagens desabilitadas para o contato.",
                         )
                       }
                     >
-                      {person.active ? "Ativo" : "Inativo"}
+                      {person.messagingDisabled
+                        ? "Mensagens pausadas"
+                        : "Mensagens ativas"}
                     </button>
                   </article>
                 ))}
               </div>
             </article>
+          ) : null}
+
+          {view === "commercial" ? (
+            <section className={styles.referenceDemoGrid}>
+              <ReferenceDemoPanel
+                title="Formas de pagamento"
+                items={[
+                  "Boleto bancário",
+                  "Cartão de crédito",
+                  "PIX",
+                  "Transferência",
+                ]}
+                onSync={() => simulateReferenceSync("payment-methods")}
+              />
+              <ReferenceDemoPanel
+                title="Canais de venda"
+                items={[
+                  "Bling",
+                  "Mercado Livre",
+                  "Loja virtual",
+                  "Venda direta",
+                ]}
+                onSync={() => simulateReferenceSync("sales-channels")}
+              />
+              <ReferenceDemoPanel
+                title="Vendedores"
+                items={[
+                  "Amanda Costa · Comercial",
+                  "Rafael Lima · Marketplace",
+                ]}
+                onSync={() => simulateReferenceSync("sellers")}
+              />
+              <ReferenceDemoPanel
+                title="Naturezas de operação"
+                items={["Venda de mercadoria", "Venda interestadual"]}
+                onSync={() => simulateReferenceSync("operation-natures")}
+              />
+            </section>
+          ) : null}
+
+          {view === "fiscal" ? (
+            <section className={styles.fiscalDemoGrid}>
+              <article className={`${styles.panel} ${styles.fixedCostPanel}`}>
+                <PanelHead
+                  title="Custos fixos e variáveis"
+                  subtitle="Persistidos localmente e aplicados por item ou nota"
+                />
+                <div className={styles.fixedCostForm}>
+                  <label>
+                    Nome
+                    <input
+                      value={fixedCostDraft.name}
+                      onChange={(event) =>
+                        setFixedCostDraft({
+                          ...fixedCostDraft,
+                          name: event.target.value,
+                        })
+                      }
+                      placeholder="Ex.: Comissão operacional"
+                    />
+                  </label>
+                  <label>
+                    Valor
+                    <input
+                      inputMode="decimal"
+                      value={fixedCostDraft.value}
+                      onChange={(event) =>
+                        setFixedCostDraft({
+                          ...fixedCostDraft,
+                          value: event.target.value,
+                        })
+                      }
+                      placeholder="0,00"
+                    />
+                  </label>
+                  <label>
+                    Tipo
+                    <select
+                      value={fixedCostDraft.valueType}
+                      onChange={(event) =>
+                        setFixedCostDraft({
+                          ...fixedCostDraft,
+                          valueType: event.target.value as "F" | "P",
+                        })
+                      }
+                    >
+                      <option value="P">Percentual</option>
+                      <option value="F">Valor fixo</option>
+                    </select>
+                  </label>
+                  <label>
+                    Aplicação
+                    <select
+                      value={fixedCostDraft.application}
+                      onChange={(event) =>
+                        setFixedCostDraft({
+                          ...fixedCostDraft,
+                          application: event.target.value as "Item" | "Nota",
+                        })
+                      }
+                    >
+                      <option value="Item">Por item</option>
+                      <option value="Nota">Por nota</option>
+                    </select>
+                  </label>
+                  <button type="button" onClick={saveFixedCost}>
+                    <Check size={14} />
+                    {fixedCostDraft.id ? "Atualizar custo" : "Adicionar custo"}
+                  </button>
+                </div>
+                <div className={styles.fixedCostList}>
+                  {state.fixedCosts.map((cost) => (
+                    <article key={cost.id}>
+                      <span>
+                        <strong>{cost.name}</strong>
+                        <small>
+                          {cost.valueType === "P"
+                            ? `${cost.value}%`
+                            : money(Math.round(cost.value * 100))}
+                          {` · por ${cost.application.toLowerCase()}`}
+                          {cost.channels.length
+                            ? ` · ${cost.channels.join(", ")}`
+                            : " · todos os canais"}
+                        </small>
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Editar ${cost.name}`}
+                        onClick={() =>
+                          setFixedCostDraft({
+                            id: cost.id,
+                            name: cost.name,
+                            value: String(cost.value),
+                            valueType: cost.valueType,
+                            application: cost.application,
+                          })
+                        }
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        className={styles.costDelete}
+                        type="button"
+                        aria-label={`Excluir ${cost.name}`}
+                        onClick={() => deleteFixedCost(cost.id, cost.name)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              </article>
+              <article
+                className={`${styles.panel} ${styles.taxReferencePanel}`}
+              >
+                <PanelHead
+                  title="Referências tributárias"
+                  subtitle="Consulta global; créditos NCM permanecem por empresa"
+                />
+                <div className={styles.taxReferenceList}>
+                  {[
+                    "ICMS · 18%",
+                    "PIS · 1,65%",
+                    "COFINS · 7,60%",
+                    "DIFAL SP · 18%",
+                  ].map((rule) => (
+                    <span key={rule}>{rule}</span>
+                  ))}
+                </div>
+                <button
+                  className={styles.manageNcmButton}
+                  type="button"
+                  onClick={() => changeView("finance")}
+                >
+                  <Percent size={14} /> Gerenciar créditos por NCM
+                </button>
+              </article>
+            </section>
+          ) : null}
+
+          {view === "finance" ? (
+            <section className={styles.financeGrid}>
+              <article className={`${styles.panel} ${styles.financeSummary}`}>
+                <PanelHead
+                  title="Rentabilidade das NF-e"
+                  subtitle="Valores recalculados quando documentos são ressincronizados"
+                />
+                <div className={styles.financeMetrics}>
+                  <div>
+                    <small>Venda líquida</small>
+                    <strong>{money(metrics.revenueCents)}</strong>
+                  </div>
+                  <div>
+                    <small>Custo</small>
+                    <strong>{money(metrics.costCents)}</strong>
+                  </div>
+                  <div>
+                    <small>Impostos</small>
+                    <strong>{money(metrics.taxCents)}</strong>
+                  </div>
+                  <div>
+                    <small>Lucro</small>
+                    <strong>{money(metrics.profitCents)}</strong>
+                  </div>
+                </div>
+                <div className={styles.tableWrap}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>NF-e</th>
+                        <th>Cliente</th>
+                        <th>Venda</th>
+                        <th>Custo</th>
+                        <th>Impostos</th>
+                        <th>Lucro</th>
+                        <th>Margem</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {state.invoices
+                        .filter((invoice) => invoice.status !== "Cancelada")
+                        .map((invoice) => {
+                          const profit =
+                            invoice.valueCents -
+                            invoice.costCents -
+                            invoice.taxCents;
+                          return (
+                            <tr key={invoice.id}>
+                              <td>
+                                <strong>{invoice.number}</strong>
+                              </td>
+                              <td>{invoice.customer}</td>
+                              <td>{money(invoice.valueCents)}</td>
+                              <td>{money(invoice.costCents)}</td>
+                              <td>{money(invoice.taxCents)}</td>
+                              <td>{money(profit)}</td>
+                              <td>
+                                {basisPoints(
+                                  Math.round(
+                                    (profit * 10_000) / invoice.valueCents,
+                                  ),
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+              <article className={`${styles.panel} ${styles.creditPanel}`}>
+                <PanelHead
+                  title="Crédito de ICMS por NCM"
+                  subtitle="Regra da empresa usada no Lucro Presumido"
+                />
+                <div className={styles.creditForm}>
+                  <label>
+                    NCM
+                    <input
+                      inputMode="numeric"
+                      maxLength={8}
+                      value={creditDraft.ncm}
+                      onChange={(event) =>
+                        setCreditDraft({
+                          ...creditDraft,
+                          ncm: event.target.value.replace(/\D/g, ""),
+                        })
+                      }
+                      placeholder="84716052"
+                    />
+                  </label>
+                  <label>
+                    Alíquota (%)
+                    <input
+                      inputMode="decimal"
+                      value={creditDraft.rate}
+                      onChange={(event) =>
+                        setCreditDraft({
+                          ...creditDraft,
+                          rate: event.target.value,
+                        })
+                      }
+                      placeholder="12,00"
+                    />
+                  </label>
+                  <label>
+                    Redução (%)
+                    <input
+                      inputMode="decimal"
+                      value={creditDraft.reduction}
+                      onChange={(event) =>
+                        setCreditDraft({
+                          ...creditDraft,
+                          reduction: event.target.value,
+                        })
+                      }
+                      placeholder="0,00"
+                    />
+                  </label>
+                  <button type="button" onClick={saveNcmCredit}>
+                    <Check size={14} />{" "}
+                    {creditDraft.id ? "Atualizar regra" : "Adicionar regra"}
+                  </button>
+                </div>
+                <div className={styles.creditList}>
+                  {state.ncmCredits.map((credit) => (
+                    <div className={styles.creditRow} key={credit.id}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCreditDraft({
+                            id: credit.id,
+                            ncm: credit.ncm,
+                            rate: String(credit.rate),
+                            reduction: String(credit.reduction),
+                          })
+                        }
+                      >
+                        <Percent size={14} />
+                        <span>
+                          <strong>{credit.ncm}</strong>
+                          <small>
+                            {credit.rate}% · redução {credit.reduction}%
+                          </small>
+                        </span>
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        className={styles.creditDelete}
+                        type="button"
+                        aria-label={`Excluir crédito do NCM ${credit.ncm}`}
+                        onClick={() => deleteNcmCredit(credit.id, credit.ncm)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            </section>
+          ) : null}
+
+          {view === "marketplaceFees" ? (
+            <section className={`${styles.panel} ${styles.marketplaceFees}`}>
+              <div className={styles.demoFeeFilters}>
+                <label>
+                  Número NF
+                  <select
+                    value={feeFilters.invoiceNumber}
+                    onChange={(event) =>
+                      setFeeFilters({
+                        ...feeFilters,
+                        invoiceNumber: event.target.value,
+                      })
+                    }
+                  >
+                    <option value="">Todas as notas</option>
+                    {state.invoices
+                      .filter((invoice) => invoice.channel === "Mercado Livre")
+                      .map((invoice) => (
+                        <option key={invoice.id} value={invoice.number}>
+                          {invoice.number}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Coligada
+                  <select value="APTech Demo" disabled>
+                    <option>APTech Demo</option>
+                  </select>
+                </label>
+                <label>
+                  Origem
+                  <select
+                    value={feeFilters.origin}
+                    onChange={(event) =>
+                      setFeeFilters({ ...feeFilters, origin: event.target.value })
+                    }
+                  >
+                    <option value="">Todas as origens</option>
+                    <option value="Mercado Livre">Mercado Livre</option>
+                  </select>
+                </label>
+                <label>
+                  Data inicial
+                  <input
+                    type="date"
+                    value={feeFilters.from}
+                    onChange={(event) =>
+                      setFeeFilters({ ...feeFilters, from: event.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  Data final
+                  <input
+                    type="date"
+                    value={feeFilters.to}
+                    onChange={(event) =>
+                      setFeeFilters({ ...feeFilters, to: event.target.value })
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFeeFilters({
+                      invoiceNumber: "",
+                      origin: "",
+                      from: "",
+                      to: "",
+                    })
+                  }
+                >
+                  <RotateCcw size={14} /> Limpar
+                </button>
+              </div>
+              <PanelHead
+                title="Relatório Taxas ML"
+                subtitle={`${marketplaceFeeRows.length} registros encontrados`}
+              />
+              <div
+                className={`${styles.tableWrap} ${styles.marketplaceFeesTable}`}
+              >
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Número NF</th>
+                      <th>Coligada</th>
+                      <th>Origem</th>
+                      <th>Cliente</th>
+                      <th>Data Emissão</th>
+                      <th>Valor</th>
+                      <th>Valor Comissão</th>
+                      <th>Percentual Comissão</th>
+                      <th>Valor Frete</th>
+                      <th>Percentual Frete</th>
+                      <th>Valor Desconto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {marketplaceFeeRows.map((invoice) => (
+                      <tr key={invoice.id}>
+                        <td>
+                          <strong>{invoice.number}</strong>
+                        </td>
+                        <td>APTech Demo</td>
+                        <td>
+                          <span className={styles.info}>{invoice.channel}</span>
+                        </td>
+                        <td>{invoice.customer}</td>
+                        <td>{invoice.issuedAt}</td>
+                        <td>{money(invoice.valueCents)}</td>
+                        <td>{money(invoice.commissionCents)}</td>
+                        <td>
+                          {invoice.commissionRate.toLocaleString("pt-BR")}%
+                        </td>
+                        <td>{money(invoice.freightCents)}</td>
+                        <td>
+                          {invoice.freightRate.toLocaleString("pt-BR", {
+                            maximumFractionDigits: 2,
+                          })}
+                          %
+                        </td>
+                        <td>{money(0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           ) : null}
 
           {view === "goals" ? (
@@ -736,6 +1847,264 @@ export function PublicDemoApp() {
                     </b>
                   </span>
                 </p>
+              </article>
+            </section>
+          ) : null}
+
+          {view === "operations" ? (
+            <section className={styles.operationsGrid}>
+              <article className={`${styles.panel} ${styles.syncCard}`}>
+                <PanelHead
+                  title="Sincronizar NF-e"
+                  subtitle="Importa situações 5 e 6 no período selecionado"
+                />
+                <div className={styles.syncForm}>
+                  <label>
+                    Data inicial
+                    <input
+                      type="date"
+                      value={syncPeriod.from}
+                      onChange={(event) =>
+                        setSyncPeriod((current) => ({
+                          ...current,
+                          from: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Data final
+                    <input
+                      type="date"
+                      value={syncPeriod.to}
+                      onChange={(event) =>
+                        setSyncPeriod((current) => ({
+                          ...current,
+                          to: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <button type="button" onClick={simulateNfeSync}>
+                    <RefreshCw size={15} /> Executar sincronização
+                  </button>
+                  <p>
+                    O gateway fake importa uma NF-e determinística e não cria
+                    duplicatas quando o mesmo período é executado novamente.
+                  </p>
+                </div>
+              </article>
+
+              <article className={`${styles.panel} ${styles.syncCard}`}>
+                <PanelHead
+                  title="Sincronizar produtos"
+                  subtitle="Atualiza catálogo, custo e fabricação própria do Bling"
+                />
+                <div className={styles.productSyncBody}>
+                  <span>
+                    <Boxes size={23} />
+                  </span>
+                  <strong>{state.products.length} produtos disponíveis</strong>
+                  <p>
+                    Na demonstração, o gateway fake aplica o mesmo resultado em
+                    repetições sucessivas.
+                  </p>
+                  <button type="button" onClick={simulateProductSync}>
+                    <RefreshCw size={15} /> Sincronizar produtos
+                  </button>
+                </div>
+              </article>
+
+              <article className={`${styles.panel} ${styles.referenceSync}`}>
+                <PanelHead
+                  title="Cadastros exigidos pela sincronização"
+                  subtitle="Atualiza referências comerciais usadas pelas NF-e"
+                />
+                <div className={styles.referenceActions}>
+                  <button
+                    type="button"
+                    onClick={() => simulateReferenceSync("payment-methods")}
+                  >
+                    <CreditCard size={16} />
+                    <span>
+                      <strong>Formas de pagamento</strong>
+                      <small>8 registros no gateway fake</small>
+                    </span>
+                    <RefreshCw size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => simulateReferenceSync("sales-channels")}
+                  >
+                    <Store size={16} />
+                    <span>
+                      <strong>Canais de venda</strong>
+                      <small>4 registros no gateway fake</small>
+                    </span>
+                    <RefreshCw size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => simulateReferenceSync("sellers")}
+                  >
+                    <Users size={16} />
+                    <span>
+                      <strong>Vendedores</strong>
+                      <small>2 registros no gateway fake</small>
+                    </span>
+                    <RefreshCw size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => simulateReferenceSync("operation-natures")}
+                  >
+                    <FileText size={16} />
+                    <span>
+                      <strong>Naturezas de operação</strong>
+                      <small>2 registros no gateway fake</small>
+                    </span>
+                    <RefreshCw size={14} />
+                  </button>
+                </div>
+              </article>
+
+              <article className={`${styles.panel} ${styles.automationCard}`}>
+                <PanelHead
+                  title="Automação operacional"
+                  subtitle="Mesma agenda que dispara sincronizações e mensagens no worker"
+                />
+                <div className={styles.automationBody}>
+                  <div className={styles.automationTitle}>
+                    <Clock3 size={17} />
+                    <span>
+                      <strong>Horários ativos</strong>
+                      <small>Fuso de São Paulo</small>
+                    </span>
+                  </div>
+                  <div className={styles.hourGrid}>
+                    {Array.from({ length: 24 }, (_, hour) => (
+                      <button
+                        key={hour}
+                        type="button"
+                        className={
+                          state.automation.scheduleHours.includes(hour)
+                            ? styles.hourActive
+                            : ""
+                        }
+                        onClick={() =>
+                          updateState(
+                            (current) => ({
+                              ...current,
+                              automation: {
+                                ...current.automation,
+                                scheduleHours:
+                                  current.automation.scheduleHours.includes(
+                                    hour,
+                                  )
+                                    ? current.automation.scheduleHours.filter(
+                                        (value) => value !== hour,
+                                      )
+                                    : [
+                                        ...current.automation.scheduleHours,
+                                        hour,
+                                      ].sort((left, right) => left - right),
+                              },
+                            }),
+                            `Agenda das ${String(hour).padStart(2, "0")}:00 atualizada.`,
+                          )
+                        }
+                      >
+                        {String(hour).padStart(2, "0")}
+                      </button>
+                    ))}
+                  </div>
+                  <label className={styles.automationToggle}>
+                    <input
+                      type="checkbox"
+                      checked={state.automation.autoDelivery}
+                      onChange={(event) =>
+                        updateState(
+                          (current) => ({
+                            ...current,
+                            automation: {
+                              ...current.automation,
+                              autoDelivery: event.target.checked,
+                            },
+                          }),
+                          "Envio automático atualizado.",
+                        )
+                      }
+                    />
+                    Enviar NF-e pronta automaticamente pelo APChat
+                  </label>
+                  <label className={styles.automationToggle}>
+                    <input
+                      type="checkbox"
+                      checked={state.automation.satisfactionEnabled}
+                      onChange={(event) =>
+                        updateState(
+                          (current) => ({
+                            ...current,
+                            automation: {
+                              ...current.automation,
+                              satisfactionEnabled: event.target.checked,
+                            },
+                          }),
+                          "Pesquisa de satisfação atualizada.",
+                        )
+                      }
+                    />
+                    <MessageSquareText size={14} /> Pesquisa de satisfação após{" "}
+                    {state.automation.satisfactionDelayDays} dias
+                  </label>
+                  <button
+                    className={styles.runAutomation}
+                    type="button"
+                    onClick={simulateScheduledCycle}
+                    disabled={state.automation.scheduleHours.length === 0}
+                  >
+                    <RefreshCw size={15} /> Simular próximo ciclo
+                  </button>
+                </div>
+              </article>
+
+              <article className={`${styles.panel} ${styles.syncHistory}`}>
+                <PanelHead
+                  title="Histórico de sincronizações"
+                  subtitle="Execuções locais da demonstração"
+                />
+                <div className={styles.tableWrap}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Rotina</th>
+                        <th>Período</th>
+                        <th>Processados</th>
+                        <th>Executada em</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {state.syncRuns.map((run) => (
+                        <tr key={run.id}>
+                          <td>
+                            <strong>{syncKindLabel(run.kind)}</strong>
+                          </td>
+                          <td>
+                            {run.from && run.to
+                              ? `${shortDemoDate(run.from)} a ${shortDemoDate(run.to)}`
+                              : "Catálogo completo"}
+                          </td>
+                          <td>{run.processed}</td>
+                          <td>{dateTime(run.createdAt)}</td>
+                          <td>
+                            <span className={styles.success}>Concluída</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </article>
             </section>
           ) : null}
@@ -818,6 +2187,20 @@ export function PublicDemoApp() {
   );
 }
 
+function demoDate(value: string): string {
+  return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(
+    new Date(`${value}T12:00:00.000Z`),
+  );
+}
+
+function shortDemoDate(value: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00.000Z`));
+}
+
 function Metric({
   label,
   value,
@@ -861,13 +2244,48 @@ function PanelHead({
   );
 }
 
+function ReferenceDemoPanel({
+  title,
+  items,
+  onSync,
+}: {
+  title: string;
+  items: string[];
+  onSync: () => void;
+}) {
+  return (
+    <article className={`${styles.panel} ${styles.referenceDemoPanel}`}>
+      <PanelHead
+        title={title}
+        subtitle={`${items.length} registros sincronizados`}
+        action={
+          <button type="button" onClick={onSync}>
+            <RefreshCw size={13} /> Sincronizar
+          </button>
+        }
+      />
+      <div>
+        {items.map((item) => (
+          <span key={item}>
+            <Check size={13} /> {item}
+          </span>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 function InvoiceTable({
   invoices,
-  onStatusChange,
+  onResync,
+  onSend,
+  onNormalize,
   compact = false,
 }: {
   invoices: DemoState["invoices"];
-  onStatusChange: (id: string, status: DemoInvoiceStatus) => void;
+  onResync?: (id: string) => void;
+  onSend?: (id: string) => void;
+  onNormalize?: (id: string) => void;
   compact?: boolean;
 }) {
   return (
@@ -882,6 +2300,7 @@ function InvoiceTable({
             <th>Valor</th>
             <th>Vínculos</th>
             <th>Status</th>
+            {!compact ? <th>Ação</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -910,31 +2329,50 @@ function InvoiceTable({
                     <Truck size={14} aria-label="Com rastreio" />
                   ) : null}
                   {!item.hasBoleto && !item.hasTracking ? "—" : null}
+                  {item.unlinkedItemCode ? (
+                    <small className={styles.unlinkedItem}>
+                      Item sem vínculo: {item.unlinkedItemCode}
+                    </small>
+                  ) : null}
                 </span>
               </td>
               <td>
-                {compact ? (
-                  <span className={statusClass(item.status)}>
-                    {item.status}
-                  </span>
-                ) : (
-                  <select
-                    value={item.status}
-                    onChange={(event) =>
-                      onStatusChange(
-                        item.id,
-                        event.target.value as DemoInvoiceStatus,
-                      )
-                    }
-                    aria-label={`Status da nota ${item.number}`}
-                  >
-                    <option>Autorizada</option>
-                    <option>Pendente</option>
-                    <option>Em processamento</option>
-                    <option>Cancelada</option>
-                  </select>
-                )}
+                <span className={deliveryStatusClass(item.deliveryStatus)}>
+                  {item.deliveryStatus}
+                </span>
+                <small>{item.status}</small>
               </td>
+              {!compact ? (
+                <td>
+                  <div className={styles.rowActions}>
+                    <button
+                      className={styles.rowAction}
+                      type="button"
+                      onClick={() => onResync?.(item.id)}
+                    >
+                      <RefreshCw size={13} /> Ressincronizar
+                    </button>
+                    {item.unlinkedItemCode ? (
+                      <button
+                        className={styles.rowAction}
+                        type="button"
+                        onClick={() => onNormalize?.(item.id)}
+                      >
+                        <Link2 size={13} /> Vincular produto
+                      </button>
+                    ) : null}
+                    {item.deliveryStatus === "Pronto para envio" ? (
+                      <button
+                        className={`${styles.rowAction} ${styles.sendAction}`}
+                        type="button"
+                        onClick={() => onSend?.(item.id)}
+                      >
+                        <Send size={13} /> Enviar
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>
@@ -1004,9 +2442,46 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
-function statusClass(status: DemoInvoiceStatus): string {
-  if (status === "Autorizada") return styles.success ?? "";
-  if (status === "Cancelada") return styles.danger ?? "";
-  if (status === "Em processamento") return styles.info ?? "";
+function deliveryStatusClass(status: DemoDeliveryStatus): string {
+  if (status === "Enviado") return styles.success ?? "";
+  if (status === "Erro") return styles.danger ?? "";
+  if (status === "Mercado livre") return styles.info ?? "";
   return styles.warning ?? "";
+}
+
+function createSyncRun(
+  kind: DemoSyncKind,
+  processed: number,
+  from: string | null = null,
+  to: string | null = null,
+): DemoSyncRun {
+  return {
+    id: `sync-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    kind,
+    from,
+    to,
+    processed,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function syncKindLabel(kind: DemoSyncKind): string {
+  if (kind === "nfe") return "NF-e por período";
+  if (kind === "nfe-details") return "Documentos da NF-e";
+  if (kind === "nfe-delivery") return "Envio de NF-e por APChat";
+  if (kind === "nfe-normalization") return "Normalização de item da NF-e";
+  if (kind === "payment-methods") return "Formas de pagamento";
+  if (kind === "sales-channels") return "Canais de venda";
+  if (kind === "sellers") return "Vendedores";
+  if (kind === "operation-natures") return "Naturezas de operação";
+  if (kind === "scheduled-cycle") return "Ciclo automático";
+  if (kind === "satisfaction") return "Pesquisa de satisfação";
+  return "Produtos";
+}
+
+function dateTime(value: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
 }

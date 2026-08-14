@@ -1,30 +1,40 @@
 "use client";
 
-import type { NfeListResponse, SessionResponse } from "@integrador/contracts";
+import type {
+  NfeBulkActionResponse,
+  NfeDetailResponse,
+  InvoiceFilterOptionsResponse,
+  NfeListResponse,
+  SessionResponse,
+} from "@integrador/contracts";
 import {
   Activity,
-  Bell,
+  Banknote,
   Boxes,
   Building2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
-  Database,
   ExternalLink,
   FileText,
   Filter,
   Gauge,
   Goal,
-  HelpCircle,
   LoaderCircle,
   LogOut,
   Menu,
+  MapPin,
+  Orbit,
   RefreshCw,
+  RotateCcw,
   Search,
+  Send,
+  Save,
   Settings,
   ShieldCheck,
   Store,
+  UserRound,
   Percent,
   Truck,
   Users,
@@ -36,12 +46,17 @@ import { useRouter } from "next/navigation";
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
+import { ApplicationSidebar } from "../layout/application-sidebar";
+import { ApplicationHeaderActions } from "../layout/application-header-actions";
+import { ApplicationGlobalSearch } from "../layout/application-global-search";
+import { SmartCsvImportButton } from "../imports/smart-csv-import";
 import styles from "./nfe.module.css";
 
 interface Filters {
   numero: string;
   serie: string;
   nome: string;
+  tipoVenda: string;
   envio: string;
   valor: string;
   dataInicial: string;
@@ -56,6 +71,7 @@ const emptyFilters: Filters = {
   numero: "",
   serie: "",
   nome: "",
+  tipoVenda: "",
   envio: "",
   valor: "",
   dataInicial: "",
@@ -70,11 +86,30 @@ export function NfeClient() {
   const router = useRouter();
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [data, setData] = useState<NfeListResponse | null>(null);
+  const [filterOptions, setFilterOptions] =
+    useState<InvoiceFilterOptionsResponse>({
+      customers: [],
+      salesChannels: [],
+    });
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(emptyFilters);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [actionPending, setActionPending] = useState<"sync" | "send" | null>(
+    null,
+  );
+  const [drawerInvoice, setDrawerInvoice] = useState<NfeDetailResponse | null>(
+    null,
+  );
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+  const [drawerTab, setDrawerTab] = useState<"contact" | "bills">("contact");
+  const [mobilePhone, setMobilePhone] = useState("");
+  const [messagingDisabled, setMessagingDisabled] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
 
   const requestList = useCallback(
     async (nextFilters: Filters, page = 1) => {
@@ -98,9 +133,10 @@ export function NfeClient() {
         if (!response.ok) throw new Error("api");
         setData((await response.json()) as NfeListResponse);
         setAppliedFilters(nextFilters);
+        setSelectedIds([]);
       } catch {
         setError(
-          "Não foi possível consultar a view_nfe. Confirme a API e o vínculo da empresa com o banco legado.",
+          "Não foi possível consultar as notas sincronizadas. Confirme a API e tente novamente.",
         );
       } finally {
         setLoading(false);
@@ -124,8 +160,23 @@ export function NfeClient() {
         const nextSession = (await response.json()) as SessionResponse;
         if (active) {
           setSession(nextSession);
-          const search = new URLSearchParams(window.location.search).get("search")?.trim() ?? "";
-          const initial = search ? { ...emptyFilters, ...( /^\d+$/.test(search) ? { numero: search } : { nome: search } ) } : emptyFilters;
+          const optionsResponse = await fetch(
+            `${API_URL}/v1/nfe/filter-options`,
+            {
+              credentials: "include",
+            },
+          );
+          if (optionsResponse.ok && active) {
+            setFilterOptions(
+              (await optionsResponse.json()) as InvoiceFilterOptionsResponse,
+            );
+          }
+          const search =
+            new URLSearchParams(window.location.search).get("search")?.trim() ??
+            "";
+          const initial = /^\d+$/.test(search)
+            ? { ...emptyFilters, numero: search }
+            : emptyFilters;
           setFilters(initial);
           await requestList(initial);
         }
@@ -167,6 +218,115 @@ export function NfeClient() {
     void requestList(next, 1);
   }
 
+  function toggleSelected(id: number) {
+    setSelectedIds((current) =>
+      current.includes(id)
+        ? current.filter((selected) => selected !== id)
+        : [...current, id],
+    );
+  }
+
+  function toggleVisible() {
+    const visibleIds = data?.items.map((item) => item.id) ?? [];
+    const allSelected = visibleIds.every((id) => selectedIds.includes(id));
+    setSelectedIds(allSelected ? [] : visibleIds);
+  }
+
+  async function runBulkAction(action: "sync" | "send") {
+    if (selectedIds.length === 0) return;
+    setActionPending(action);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await fetch(`${API_URL}/v1/nfe/${action}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      if (!response.ok) throw new Error(await responseMessage(response));
+      const result = (await response.json()) as NfeBulkActionResponse;
+      const actionLabel =
+        action === "sync" ? "ressincronização" : "envio pelo APChat";
+      setSuccess(
+        `${result.queued.length} job(s) de ${actionLabel} adicionados à fila${result.skipped.length ? ` · ${result.skipped.length} ignorado(s)` : ""}.`,
+      );
+      setSelectedIds([]);
+      await requestList(appliedFilters, data?.pagination.page ?? 1);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível executar a ação selecionada.",
+      );
+    } finally {
+      setActionPending(null);
+    }
+  }
+
+  async function openDrawer(id: number, tab: "contact" | "bills") {
+    setDrawerTab(tab);
+    setDrawerInvoice(null);
+    setDrawerError(null);
+    setDrawerLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/v1/nfe/${id}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error(await responseMessage(response));
+      const detail = (await response.json()) as NfeDetailResponse;
+      setDrawerInvoice(detail);
+      setMobilePhone(detail.contact?.mobilePhone ?? "");
+      setMessagingDisabled(detail.contact?.messagingDisabled ?? false);
+    } catch (cause) {
+      setDrawerError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível carregar os dados da NF-e.",
+      );
+    } finally {
+      setDrawerLoading(false);
+    }
+  }
+
+  function closeDrawer() {
+    if (savingContact) return;
+    setDrawerInvoice(null);
+    setDrawerError(null);
+    setDrawerLoading(false);
+  }
+
+  async function saveContact() {
+    const invoiceId = drawerInvoice?.invoice.id;
+    if (!invoiceId || !drawerInvoice.contact) return;
+    setSavingContact(true);
+    setDrawerError(null);
+    try {
+      const response = await fetch(`${API_URL}/v1/nfe/${invoiceId}/contact`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mobilePhone, messagingDisabled }),
+      });
+      if (!response.ok) throw new Error(await responseMessage(response));
+      const queued =
+        (await response.json()) as NfeBulkActionResponse["queued"][number];
+      setSuccess(
+        `Atualização do contato enviada ao Bling (${queued.id.slice(0, 8)}). O status das notas será reavaliado pelo worker.`,
+      );
+      closeDrawer();
+      await requestList(appliedFilters, data?.pagination.page ?? 1);
+    } catch (cause) {
+      setDrawerError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível atualizar o contato no Bling.",
+      );
+    } finally {
+      setSavingContact(false);
+    }
+  }
+
   if (!session && loading) {
     return (
       <main className={styles.statePage}>
@@ -197,19 +357,26 @@ export function NfeClient() {
 
   return (
     <main className={styles.shell}>
+      <ApplicationSidebar session={session} open={menuOpen} onLogout={logout} />
       <aside
+        hidden
+        style={{ display: "none" }}
         className={`${styles.sidebar} ${menuOpen ? styles.sidebarOpen : ""}`}
       >
         <Link className={styles.brand} href="/">
           <span>
-            <Workflow size={18} />
+            <Orbit size={18} />
           </span>
           <div>
             <strong>APBling</strong>
             <small>BLING OPERATIONS</small>
           </div>
         </Link>
-        <button className={styles.tenant} type="button" disabled>
+        <Link
+          className={styles.tenant}
+          href="/app/dashboard#organization"
+          title="Trocar organização"
+        >
           <span>
             <Building2 size={16} />
           </span>
@@ -218,7 +385,7 @@ export function NfeClient() {
             <strong>{session.tenant.name}</strong>
           </div>
           <ChevronDown size={14} />
-        </button>
+        </Link>
         <nav className={styles.nav} aria-label="Navegação da aplicação">
           <p>OPERAÇÃO</p>
           <Link href="/app/dashboard">
@@ -233,12 +400,18 @@ export function NfeClient() {
           <Link href="/app/people">
             <Users size={17} /> Pessoas
           </Link>
-          <Link href="/app/documents"><Truck size={17} /> Boletos e rastreio</Link>
-          <Link href="/app/commercial"><Store size={17} /> Cadastros comerciais</Link>
+          <Link href="/app/documents">
+            <Truck size={17} /> Boletos e rastreio
+          </Link>
+          <Link href="/app/commercial">
+            <Store size={17} /> Cadastros comerciais
+          </Link>
           <Link href="/app/finance">
             <CircleDollarSign size={17} /> Custos e margem
           </Link>
-          <Link href="/app/fiscal"><Percent size={17} /> Custos e tributação</Link>
+          <Link href="/app/fiscal">
+            <Percent size={17} /> Custos e tributação
+          </Link>
           <Link href="/app/goals">
             <Goal size={17} /> Metas
           </Link>
@@ -246,17 +419,16 @@ export function NfeClient() {
             <Activity size={17} /> Jobs e integrações
           </Link>
           <p>ADMINISTRAÇÃO</p>
-          {session.role === "owner" || session.role === "admin" ? <Link href="/app/users">
-            <ShieldCheck size={17} /> Usuários e acesso
-          </Link> : null}
+          {session.permissions.includes("users:manage") ? (
+            <Link href="/app/users">
+              <ShieldCheck size={17} /> Usuários e acesso
+            </Link>
+          ) : null}
           <Link href="/app/settings">
             <Settings size={17} /> Configurações
           </Link>
         </nav>
         <div className={styles.sidebarFooter}>
-          <span>
-            <HelpCircle size={16} /> Central de ajuda
-          </span>
           <button type="button" onClick={() => void logout()}>
             <LogOut size={16} /> Sair
           </button>
@@ -273,35 +445,8 @@ export function NfeClient() {
           >
             <Menu size={20} />
           </button>
-          <label className={styles.globalSearch}>
-            <Search size={16} />
-            <input
-              aria-label="Buscar pelo nome do cliente"
-              placeholder="Buscar cliente..."
-              value={filters.nome}
-              onChange={(event) =>
-                setFilters((current) => ({
-                  ...current,
-                  nome: event.target.value,
-                }))
-              }
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void requestList(filters, 1);
-              }}
-            />
-            <kbd>⌘ K</kbd>
-          </label>
-          <span className={styles.dbBadge}>
-            <Database size={14} /> PostgreSQL conectado
-          </span>
-          <button
-            className={styles.iconButton}
-            type="button"
-            aria-label="Avisos"
-          >
-            <Bell size={17} />
-          </button>
-          <div className={styles.avatar}>{initials(session.user.name)}</div>
+          <ApplicationGlobalSearch />
+          <ApplicationHeaderActions session={session} onLogout={logout} />
         </header>
 
         <div className={styles.content}>
@@ -314,17 +459,35 @@ export function NfeClient() {
                 listagem Adianti.
               </p>
             </div>
-            <button
-              className={styles.refreshButton}
-              type="button"
-              onClick={() =>
-                void requestList(appliedFilters, data?.pagination.page)
-              }
-              disabled={loading}
-            >
-              <RefreshCw className={loading ? styles.spin : ""} size={16} />
-              Atualizar
-            </button>
+            <div className={styles.titleActions}>
+              {session.permissions.includes("nfe:manage") &&
+              session.permissions.includes("imports:manage") ? (
+                <SmartCsvImportButton
+                  defaultEntity="invoices"
+                  onComplete={() =>
+                    requestList(appliedFilters, data?.pagination.page)
+                  }
+                  compact
+                />
+              ) : null}
+              <Link
+                className={styles.syncButton}
+                href="/app/operations#bling-sync"
+              >
+                <Workflow size={16} /> Sincronizar NF-e
+              </Link>
+              <button
+                className={styles.refreshButton}
+                type="button"
+                onClick={() =>
+                  void requestList(appliedFilters, data?.pagination.page)
+                }
+                disabled={loading}
+              >
+                <RefreshCw className={loading ? styles.spin : ""} size={16} />
+                Atualizar lista
+              </button>
+            </div>
           </section>
 
           <section
@@ -391,6 +554,36 @@ export function NfeClient() {
                   }
                   placeholder="Exata"
                 />
+              </Field>
+              <Field label="Cliente">
+                <select
+                  value={filters.nome}
+                  onChange={(event) =>
+                    setFilters({ ...filters, nome: event.target.value })
+                  }
+                >
+                  <option value="">Todos os clientes</option>
+                  {filterOptions.customers.map((customer) => (
+                    <option key={customer} value={customer}>
+                      {customer}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Canal de venda">
+                <select
+                  value={filters.tipoVenda}
+                  onChange={(event) =>
+                    setFilters({ ...filters, tipoVenda: event.target.value })
+                  }
+                >
+                  <option value="">Todos os canais</option>
+                  {filterOptions.salesChannels.map((salesChannel) => (
+                    <option key={salesChannel} value={salesChannel}>
+                      {salesChannel}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Valor">
                 <input
@@ -466,19 +659,75 @@ export function NfeClient() {
             </div>
           </form>
 
+          <section className={styles.bulkActions} aria-label="Ações em lote">
+            <div>
+              <strong>{selectedIds.length} selecionada(s)</strong>
+              <span>Máximo de 50 NF-e por operação</span>
+            </div>
+            <button
+              type="button"
+              disabled={
+                selectedIds.length === 0 ||
+                Boolean(actionPending) ||
+                !session.permissions.includes("nfe:manage")
+              }
+              onClick={() => void runBulkAction("sync")}
+            >
+              {actionPending === "sync" ? (
+                <LoaderCircle className={styles.spin} size={15} />
+              ) : (
+                <RotateCcw size={15} />
+              )}
+              Ressincronizar
+            </button>
+            <button
+              className={styles.sendButton}
+              type="button"
+              disabled={
+                selectedIds.length === 0 ||
+                Boolean(actionPending) ||
+                !session.permissions.includes("nfe:manage")
+              }
+              onClick={() => void runBulkAction("send")}
+            >
+              {actionPending === "send" ? (
+                <LoaderCircle className={styles.spin} size={15} />
+              ) : (
+                <Send size={15} />
+              )}
+              Enviar pelo APChat
+            </button>
+          </section>
+          {success ? <div className={styles.success}>{success}</div> : null}
+
           <section className={styles.tablePanel}>
             <div className={styles.tableHead}>
               <div>
                 <strong>Resultado da consulta</strong>
                 <span>{data?.pagination.total ?? 0} notas · 50 por página</span>
               </div>
-              <span className={styles.readOnly}>READ-ONLY SEGURO</span>
+              <span className={styles.readOnly}>
+                DADOS FISCAIS SOMENTE LEITURA
+              </span>
             </div>
             {error ? <div className={styles.error}>{error}</div> : null}
             <div className={styles.tableWrap}>
               <table>
                 <thead>
                   <tr>
+                    <th className={styles.checkCell}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(
+                          data?.items.length &&
+                          data.items.every((item) =>
+                            selectedIds.includes(item.id),
+                          ),
+                        )}
+                        onChange={toggleVisible}
+                        aria-label="Selecionar notas visíveis"
+                      />
+                    </th>
                     <th>Número</th>
                     <th>Cliente</th>
                     <th>Emissão</th>
@@ -491,7 +740,7 @@ export function NfeClient() {
                 <tbody>
                   {loading && !data ? (
                     <tr>
-                      <td className={styles.empty} colSpan={7}>
+                      <td className={styles.empty} colSpan={8}>
                         <LoaderCircle className={styles.spin} size={21} />
                         Consultando PostgreSQL...
                       </td>
@@ -499,7 +748,7 @@ export function NfeClient() {
                   ) : null}
                   {!loading && data?.items.length === 0 ? (
                     <tr>
-                      <td className={styles.empty} colSpan={7}>
+                      <td className={styles.empty} colSpan={8}>
                         Nenhuma nota corresponde aos filtros aplicados.
                       </td>
                     </tr>
@@ -508,12 +757,30 @@ export function NfeClient() {
                     const pdf = safeHttpUrl(invoice.linkPdf);
                     return (
                       <tr key={invoice.id}>
+                        <td className={styles.checkCell}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(invoice.id)}
+                            onChange={() => toggleSelected(invoice.id)}
+                            aria-label={`Selecionar NF-e ${invoice.numero}`}
+                          />
+                        </td>
                         <td>
-                          <Link href={`/app/nfe/${invoice.id}`}><strong>#{invoice.numero}</strong></Link>
+                          <Link href={`/app/nfe/${invoice.id}`}>
+                            <strong>#{invoice.numero}</strong>
+                          </Link>
                           <small>Série {invoice.serie ?? "—"}</small>
                         </td>
                         <td>
-                          <strong>{invoice.nome}</strong>
+                          <button
+                            className={styles.contactButton}
+                            type="button"
+                            onClick={() =>
+                              void openDrawer(invoice.id, "contact")
+                            }
+                          >
+                            <strong>{invoice.nome}</strong>
+                          </button>
                           <small>
                             {invoice.envioDesabilitado
                               ? "Mensagens desabilitadas"
@@ -555,7 +822,20 @@ export function NfeClient() {
                           >
                             {invoice.statusEnvio}
                           </span>
-                          {invoice.temBoleto ? <small>Com boleto</small> : null}
+                          <small className={styles.statusReason}>
+                            {deliveryReason(invoice)}
+                          </small>
+                          {invoice.temBoleto ? (
+                            <button
+                              className={styles.billButton}
+                              type="button"
+                              onClick={() =>
+                                void openDrawer(invoice.id, "bills")
+                              }
+                            >
+                              <Banknote size={12} /> Ver boleto
+                            </button>
+                          ) : null}
                         </td>
                       </tr>
                     );
@@ -598,8 +878,272 @@ export function NfeClient() {
           </section>
         </div>
       </section>
+      {drawerLoading || drawerInvoice || drawerError ? (
+        <div className={styles.drawerBackdrop} onMouseDown={closeDrawer}>
+          <aside
+            className={styles.detailDrawer}
+            aria-label="Dados operacionais da NF-e"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span>NF-e {drawerInvoice?.invoice.numero ?? ""}</span>
+                <h2>Contato e cobrança</h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeDrawer}
+                aria-label="Fechar painel"
+              >
+                <X size={18} />
+              </button>
+            </header>
+            {drawerLoading ? (
+              <div className={styles.drawerState}>
+                <LoaderCircle className={styles.spin} size={24} />
+                Carregando dados vinculados...
+              </div>
+            ) : null}
+            {drawerError ? (
+              <div className={styles.drawerError}>{drawerError}</div>
+            ) : null}
+            {drawerInvoice ? (
+              <>
+                <nav className={styles.drawerTabs}>
+                  <button
+                    className={
+                      drawerTab === "contact" ? styles.drawerTabActive : ""
+                    }
+                    type="button"
+                    onClick={() => setDrawerTab("contact")}
+                  >
+                    <UserRound size={14} /> Contato
+                  </button>
+                  <button
+                    className={
+                      drawerTab === "bills" ? styles.drawerTabActive : ""
+                    }
+                    type="button"
+                    onClick={() => setDrawerTab("bills")}
+                  >
+                    <Banknote size={14} /> Boletos (
+                    {drawerInvoice.boletos.length})
+                  </button>
+                </nav>
+                {drawerTab === "contact" ? (
+                  <ContactDrawer
+                    detail={drawerInvoice}
+                    mobilePhone={mobilePhone}
+                    messagingDisabled={messagingDisabled}
+                    disabled={
+                      !session.permissions.includes("people:manage") ||
+                      savingContact
+                    }
+                    onMobilePhone={setMobilePhone}
+                    onMessagingDisabled={setMessagingDisabled}
+                    onSave={() => void saveContact()}
+                    saving={savingContact}
+                  />
+                ) : (
+                  <BillsDrawer detail={drawerInvoice} />
+                )}
+              </>
+            ) : null}
+          </aside>
+        </div>
+      ) : null}
     </main>
   );
+}
+
+function ContactDrawer({
+  detail,
+  mobilePhone,
+  messagingDisabled,
+  disabled,
+  saving,
+  onMobilePhone,
+  onMessagingDisabled,
+  onSave,
+}: {
+  detail: NfeDetailResponse;
+  mobilePhone: string;
+  messagingDisabled: boolean;
+  disabled: boolean;
+  saving: boolean;
+  onMobilePhone: (value: string) => void;
+  onMessagingDisabled: (value: boolean) => void;
+  onSave: () => void;
+}) {
+  const contact = detail.contact;
+  if (!contact)
+    return (
+      <div className={styles.drawerState}>
+        <UserRound size={24} />
+        <strong>Contato não localizado</strong>
+        <span>Esta é a razão pela qual a nota não pode ser enviada.</span>
+      </div>
+    );
+  return (
+    <div className={styles.drawerBody}>
+      <section className={styles.contactSummary}>
+        <div>
+          <small>ID BLING</small>
+          <strong>{contact.blingId}</strong>
+        </div>
+        <div>
+          <small>NOME</small>
+          <strong>{contact.name}</strong>
+        </div>
+        <div>
+          <small>DOCUMENTO</small>
+          <strong>{contact.documentNumber ?? "Não informado"}</strong>
+        </div>
+        <div>
+          <small>IE / RG</small>
+          <strong>
+            {contact.stateRegistration ??
+              contact.identityDocument ??
+              "Não informado"}
+          </strong>
+        </div>
+        <div>
+          <small>TELEFONE</small>
+          <strong>
+            {contact.contactPhone ?? contact.phone ?? "Não informado"}
+          </strong>
+        </div>
+        <div>
+          <small>E-MAIL</small>
+          <strong>{contact.email ?? "Não informado"}</strong>
+        </div>
+      </section>
+      {contact.address ? (
+        <div className={styles.addressBox}>
+          <MapPin size={15} />
+          <span>
+            {[
+              contact.address.street,
+              contact.address.number,
+              contact.address.district,
+              contact.address.city,
+              contact.address.state,
+            ]
+              .filter(Boolean)
+              .join(", ")}
+          </span>
+        </div>
+      ) : null}
+      <section className={styles.deliveryDiagnosis}>
+        <strong>Diagnóstico do envio</strong>
+        <p>
+          {detail.invoice.observacaoEnvio ??
+            "Aguardando avaliação operacional da nota."}
+        </p>
+      </section>
+      <section className={styles.contactForm}>
+        <label>
+          Celular com DDD
+          <input
+            value={mobilePhone}
+            maxLength={25}
+            placeholder="(00) 00000-0000"
+            disabled={disabled}
+            onChange={(event) => onMobilePhone(event.target.value)}
+          />
+          <small>
+            O cadastro completo atual é buscado e reenviado ao Bling; somente o
+            celular é alterado.
+          </small>
+        </label>
+        <label className={styles.switchRow}>
+          <input
+            type="checkbox"
+            checked={messagingDisabled}
+            disabled={disabled}
+            onChange={(event) => onMessagingDisabled(event.target.checked)}
+          />
+          <span>
+            <strong>Desabilitar envio</strong>
+            <small>Ignora mensagens desta pessoa em todas as NF-e.</small>
+          </span>
+        </label>
+        <button
+          className={styles.saveContactButton}
+          type="button"
+          disabled={disabled}
+          onClick={onSave}
+        >
+          {saving ? (
+            <LoaderCircle className={styles.spin} size={15} />
+          ) : (
+            <Save size={15} />
+          )}
+          {saving ? "Enviando ao Bling" : "Salvar contato"}
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function BillsDrawer({ detail }: { detail: NfeDetailResponse }) {
+  return (
+    <div className={styles.drawerBody}>
+      {detail.boletos.map((bill) => (
+        <article className={styles.billCard} key={bill.id}>
+          <span>
+            <Banknote size={17} />
+          </span>
+          <div>
+            <strong>{brl(bill.valor)}</strong>
+            <small>
+              {bill.numeroExterno ?? `Boleto #${bill.id}`} · vence{" "}
+              {formatDate(bill.vencimento)}
+            </small>
+            <small>Situação: {billStatusLabel(bill.situacao)}</small>
+          </div>
+          {safeHttpUrl(bill.link) ? (
+            <a
+              href={safeHttpUrl(bill.link)!}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Abrir <ExternalLink size={13} />
+            </a>
+          ) : (
+            <span className={styles.muted}>Link pendente</span>
+          )}
+        </article>
+      ))}
+      {detail.boletos.length === 0 ? (
+        <div className={styles.drawerState}>
+          <Banknote size={24} />
+          <strong>Nenhum boleto vinculado</strong>
+          <span>
+            Ressincronize a nota se a forma de pagamento exigir boleto.
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function deliveryReason(invoice: NfeListResponse["items"][number]) {
+  if (invoice.observacaoEnvio) return invoice.observacaoEnvio;
+  if (invoice.envioDesabilitado)
+    return "Mensagens desabilitadas para o contato";
+  if (invoice.statusId === 1) return "Envio concluído";
+  if (invoice.statusId === 2) return "NF-e pronta para envio";
+  if (invoice.statusId === 3)
+    return "Falha operacional; abra a nota para conferir";
+  return "Ignorada pela regra operacional";
+}
+
+function billStatusLabel(value: number | null) {
+  if (value === 1) return "Em aberto";
+  if (value === 2) return "Pago";
+  if (value === 3) return "Cancelado";
+  return "Não informada";
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -644,11 +1188,13 @@ function formatDate(value: string | null): string {
   return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part[0] ?? "")
-    .join("")
-    .toUpperCase();
+async function responseMessage(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as { message?: unknown };
+    if (typeof payload.message === "string") return payload.message;
+    if (Array.isArray(payload.message)) return payload.message.join(". ");
+  } catch {
+    return "Não foi possível concluir a operação.";
+  }
+  return "Não foi possível concluir a operação.";
 }

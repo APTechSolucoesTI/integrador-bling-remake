@@ -1,10 +1,13 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Queue } from "bullmq";
 import {
   goalListResponseSchema,
+  globalSearchResultSchema,
+  goalDetailResponseSchema,
   goalResourcesResponseSchema,
   integrationJobSchema,
+  invoiceFilterOptionsResponseSchema,
   operationsOverviewSchema,
   oauthAuthorizationResponseSchema,
   peopleListResponseSchema,
@@ -12,12 +15,16 @@ import {
   profitabilityResponseSchema,
   queuedJobResponseSchema,
   type GoalListQuery,
+  type GlobalSearchResult,
+  type InvoiceFilterOptionsResponse,
   type GoalListResponse,
+  type GoalDetailResponse,
   type GoalCreateInput,
   type GoalResourcesResponse,
   type OperationsJobRequest,
   type OperationsOverview,
   type OperationsSettingsUpdate,
+  type NfeSyncPolicy,
   type OauthAuthorizationResponse,
   type PeopleListQuery,
   type PeopleListResponse,
@@ -27,13 +34,41 @@ import {
   type ProfitabilityResponse,
   type QueuedJobResponse,
 } from "@integrador/contracts";
-import { Prisma, type DatabaseClient } from "@integrador/db";
+import {
+  decryptSecret,
+  encryptSecret,
+  Prisma,
+  type DatabaseClient,
+} from "@integrador/db";
 import type { AuthPrincipal } from "../auth/auth.types.js";
 import { DATABASE_CLIENT } from "../database/database.module.js";
-import { INTEGRATION_QUEUE_CLIENT } from "../queue/queue.module.js";
+import { INTEGRATION_QUEUE_CLIENT } from "../queue/queue.constants.js";
 
 interface CountRow {
   total: bigint;
+}
+
+interface GlobalInvoiceSearchRow {
+  id: number;
+  numero: string;
+  customer: string;
+  issuedAt: string | null;
+}
+interface GlobalPersonSearchRow {
+  id: number;
+  name: string;
+  document: string | null;
+  email: string | null;
+}
+interface GlobalProductSearchRow {
+  id: number;
+  name: string;
+  code: string | null;
+  ncm: string | null;
+}
+
+interface InvoiceFilterOptionRow {
+  value: string;
 }
 
 interface ProductRow {
@@ -98,6 +133,9 @@ interface SectorResourceRow {
   id: number;
   name: string;
 }
+interface CompetenceResourceRow {
+  value: string;
+}
 
 interface LegacyTokenRow {
   configured: boolean;
@@ -105,36 +143,6 @@ interface LegacyTokenRow {
   updatedAt: Date | null;
 }
 
-interface LegacyApChatRow {
-  configured: boolean;
-  messagesEnabled: boolean;
-  uuid: string | null;
-  sendNumber: string | null;
-  reportNumber: string | null;
-  testNumber: string | null;
-}
-
-interface LegacyScheduleRow {
-  id: number;
-  hours: number[];
-  description: string | null;
-}
-interface LegacySurveyRow {
-  id: number;
-  enabled: boolean;
-  daysAfterShipping: number | null;
-  hour: number | null;
-  link: string | null;
-  message: string | null;
-}
-interface AuthorizationRow {
-  bling: boolean;
-  mercadoLivre: boolean;
-}
-interface AuthorizationCredentialRow {
-  clientId: string | null;
-  mercadoLivreClientId: string | null;
-}
 interface IdRow {
   id: number;
 }
@@ -149,14 +157,22 @@ interface GoalStatusOnlyRow {
   id: number;
   statusId: number;
 }
-
-interface LegacyLogRow {
+interface GoalDetailRow {
   id: number;
-  source: string;
-  method: string;
-  status: number;
-  message: string;
-  occurredAt: Date;
+  statusId: number;
+  competencia: string | null;
+  dataInicial: string | null;
+  dataFinal: string | null;
+}
+interface GoalTargetDetailRow {
+  id: number;
+  value: string;
+  commissionType: "P" | "R" | null;
+  commission: string;
+}
+interface GoalCostDetailRow {
+  description: string;
+  value: string;
 }
 
 interface ProfitabilityRow {
@@ -202,13 +218,21 @@ export class CatalogService {
   ): Promise<ProductListResponse> {
     const unitId = this.unit(principal);
     const filters: Prisma.Sql[] = [Prisma.sql`unit_id = ${unitId}`];
+    if (query.search) {
+      const search = `%${query.search}%`;
+      filters.push(
+        Prisma.sql`(nome ILIKE ${search} OR codigo ILIKE ${search} OR id_produto ILIKE ${search})`,
+      );
+    }
     if (query.idProduto)
       filters.push(Prisma.sql`id_produto ILIKE ${`%${query.idProduto}%`}`);
     if (query.nome) filters.push(Prisma.sql`nome ILIKE ${`%${query.nome}%`}`);
     if (query.codigo)
       filters.push(Prisma.sql`codigo ILIKE ${`%${query.codigo}%`}`);
     if (query.fabricacaoPropria)
-      filters.push(Prisma.sql`fp = ${query.fabricacaoPropria}`);
+      filters.push(
+        Prisma.sql`fabricacao_propria = ${query.fabricacaoPropria === "S"}`,
+      );
     const where = Prisma.join(filters, " AND ");
     const order = this.productOrder(query);
     const offset = (query.page - 1) * query.pageSize;
@@ -224,9 +248,8 @@ export class CatalogService {
           NULLIF(BTRIM(ncm), '') AS ncm,
           CASE WHEN custo IS NULL THEN NULL
             ELSE ROUND(custo::numeric, 2)::text END AS custo,
-          situacao,
-          CASE WHEN fp = 'S' THEN TRUE WHEN fp = 'N' THEN FALSE ELSE NULL END
-            AS "fabricacaoPropria",
+          CASE WHEN active THEN 'A' ELSE 'I' END AS situacao,
+          fabricacao_propria AS "fabricacaoPropria",
           ultima_atualizacao_bling AS "atualizadoEm"
         FROM produtos
         WHERE ${where}
@@ -262,7 +285,7 @@ export class CatalogService {
     }
     if (query.envioDesabilitado)
       filters.push(
-        Prisma.sql`p.desabilitar_envio = ${query.envioDesabilitado}`,
+        Prisma.sql`p.desabilitar_envio = ${query.envioDesabilitado === "S"}`,
       );
     const where = Prisma.join(filters, " AND ");
     const order = this.peopleOrder(query);
@@ -279,7 +302,7 @@ export class CatalogService {
           COALESCE(NULLIF(BTRIM(p.telefone_contato), ''), NULLIF(BTRIM(p.telefone), '')) AS telefone,
           NULLIF(BTRIM(p.celular), '') AS celular,
           NULLIF(BTRIM(p.email), '') AS email,
-          p.desabilitar_envio = 'S' AS "envioDesabilitado",
+          p.desabilitar_envio AS "envioDesabilitado",
           address.id AS "addressId",
           address.endereco AS logradouro,
           address.numero AS "addressNumber",
@@ -339,7 +362,7 @@ export class CatalogService {
   ): Promise<void> {
     const unitId = this.unit(principal);
     const updated = await this.database.$executeRaw(Prisma.sql`
-      UPDATE pessoa SET desabilitar_envio=${disabled ? "S" : "N"} WHERE id=${id} AND unit_id=${unitId}
+      UPDATE pessoa SET desabilitar_envio=${disabled} WHERE id=${id} AND unit_id=${unitId}
     `);
     if (updated === 0)
       throw new BadRequestException("Pessoa não encontrada para esta empresa");
@@ -361,7 +384,7 @@ export class CatalogService {
     query: GoalListQuery,
   ): Promise<GoalListResponse> {
     const unitId = this.unit(principal);
-    const filters: Prisma.Sql[] = [Prisma.sql`m.system_unit_id = ${unitId}`];
+    const filters: Prisma.Sql[] = [Prisma.sql`m.unit_id = ${unitId}`];
     if (query.competencia)
       filters.push(Prisma.sql`m.mes_ano ILIKE ${`%${query.competencia}%`}`);
     if (query.dataInicial)
@@ -371,7 +394,9 @@ export class CatalogService {
     if (query.dataFinal)
       filters.push(Prisma.sql`m.data_final::date = ${query.dataFinal}::date`);
     if (query.statusId !== undefined)
-      filters.push(Prisma.sql`m.status_id = ${query.statusId}`);
+      filters.push(
+        Prisma.sql`m.status = ${goalStatusName(query.statusId)}::"GoalStatus"`,
+      );
     const where = Prisma.join(filters, " AND ");
     const offset = (query.page - 1) * query.pageSize;
 
@@ -382,8 +407,8 @@ export class CatalogService {
           m.mes_ano AS competencia,
           TO_CHAR(m.data_inicial, 'YYYY-MM-DD') AS "dataInicial",
           TO_CHAR(m.data_final, 'YYYY-MM-DD') AS "dataFinal",
-          m.status_id AS "statusId",
-          COALESCE(ms.nome, 'Indefinido') AS status,
+          CASE m.status WHEN 'open' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END AS "statusId",
+          CASE m.status WHEN 'open' THEN 'Aberta' WHEN 'completed' THEN 'Concluída' ELSE 'Cancelada' END AS status,
           ROUND(COALESCE(v.valor, 0)::numeric, 2)::text AS "valorMetaVendedores",
           ROUND(COALESCE(s.valor, 0)::numeric, 2)::text AS "valorMetaSetores",
           ROUND(COALESCE(c.valor, 0)::numeric, 2)::text AS "custoPlanejado",
@@ -391,7 +416,6 @@ export class CatalogService {
           COALESCE(s.quantidade, 0)::bigint AS setores,
           COALESCE(c.quantidade, 0)::bigint AS custos
         FROM meta m
-        LEFT JOIN meta_status ms ON ms.id = m.status_id
         LEFT JOIN LATERAL (
           SELECT SUM(mv.valor_meta) AS valor, COUNT(*) AS quantidade
           FROM meta_vendedores mv WHERE mv.meta_id = m.id
@@ -413,13 +437,13 @@ export class CatalogService {
         SELECT COUNT(*)::bigint AS total FROM meta m WHERE ${where}
       `),
       this.database.$queryRaw<GoalStatusRow[]>(Prisma.sql`
-        SELECT m.status_id AS "statusId", COALESCE(ms.nome, 'Indefinido') AS label,
+        SELECT CASE m.status WHEN 'open' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END AS "statusId",
+          CASE m.status WHEN 'open' THEN 'Aberta' WHEN 'completed' THEN 'Concluída' ELSE 'Cancelada' END AS label,
           COUNT(*)::bigint AS total
         FROM meta m
-        LEFT JOIN meta_status ms ON ms.id = m.status_id
-        WHERE m.system_unit_id = ${unitId}
-        GROUP BY m.status_id, ms.nome
-        ORDER BY m.status_id
+        WHERE m.unit_id = ${unitId}
+        GROUP BY m.status
+        ORDER BY "statusId"
       `),
     ]);
     const total = Number(totals[0]?.total ?? 0n);
@@ -443,16 +467,77 @@ export class CatalogService {
     principal: AuthPrincipal,
   ): Promise<GoalResourcesResponse> {
     const unitId = this.unit(principal);
-    const [vendors, sectors] = await Promise.all([
+    const [vendors, sectors, competences] = await Promise.all([
       this.database.$queryRaw<GoalResourceRow[]>(Prisma.sql`
         SELECT v.id, COALESCE(NULLIF(BTRIM(v.nome), ''), 'Sem nome') AS name, NULLIF(BTRIM(s.nome), '') AS sector
-        FROM vendedores v LEFT JOIN setor s ON s.id=v.setor_id WHERE v.unit_id=${unitId} ORDER BY v.nome, v.id
+        FROM vendedores v LEFT JOIN setor s ON s.id=v.sector_id WHERE v.unit_id=${unitId} ORDER BY v.nome, v.id
       `),
       this.database.$queryRaw<SectorResourceRow[]>(Prisma.sql`
-        SELECT id, COALESCE(NULLIF(BTRIM(nome), ''), 'Sem nome') AS name FROM setor ORDER BY nome, id
+        SELECT id, COALESCE(NULLIF(BTRIM(nome), ''), 'Sem nome') AS name FROM setor WHERE unit_id=${unitId} ORDER BY nome, id
+      `),
+      this.database.$queryRaw<CompetenceResourceRow[]>(Prisma.sql`
+        SELECT DISTINCT BTRIM(mes_ano) AS value
+        FROM meta
+        WHERE unit_id = ${unitId} AND NULLIF(BTRIM(mes_ano), '') IS NOT NULL
+        ORDER BY value DESC
+        LIMIT 120
       `),
     ]);
-    return goalResourcesResponseSchema.parse({ vendors, sectors });
+    return goalResourcesResponseSchema.parse({
+      vendors,
+      sectors,
+      competences: competences.map((item) => item.value),
+    });
+  }
+
+  async goalDetail(
+    principal: AuthPrincipal,
+    goalId: number,
+  ): Promise<GoalDetailResponse> {
+    const unitId = this.unit(principal);
+    const goals = await this.database.$queryRaw<GoalDetailRow[]>(Prisma.sql`
+      SELECT id,
+             CASE status WHEN 'open' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END AS "statusId",
+             COALESCE(mes_ano, '') AS competencia,
+             TO_CHAR(data_inicial, 'YYYY-MM-DD') AS "dataInicial",
+             TO_CHAR(data_final, 'YYYY-MM-DD') AS "dataFinal"
+      FROM meta
+      WHERE id = ${goalId} AND unit_id = ${unitId}
+      LIMIT 1
+    `);
+    const goal = goals[0];
+    if (!goal) throw new BadRequestException("Meta não encontrada");
+    if (!goal.competencia || !goal.dataInicial || !goal.dataFinal)
+      throw new BadRequestException(
+        "Meta sem competência ou período válido para edição",
+      );
+    const [vendors, sectors, costs] = await Promise.all([
+      this.database.$queryRaw<GoalTargetDetailRow[]>(Prisma.sql`
+        SELECT vendedores_id AS id,
+               ROUND(COALESCE(valor_meta, 0)::numeric, 2)::text AS value,
+               tipo_comissao AS "commissionType",
+               ROUND(COALESCE(comissao, 0)::numeric, 2)::text AS commission
+        FROM meta_vendedores WHERE meta_id = ${goalId} ORDER BY id
+      `),
+      this.database.$queryRaw<GoalTargetDetailRow[]>(Prisma.sql`
+        SELECT setor_id AS id,
+               ROUND(COALESCE(valor_meta, 0)::numeric, 2)::text AS value,
+               tipo_comissao AS "commissionType",
+               ROUND(COALESCE(comissao, 0)::numeric, 2)::text AS commission
+        FROM meta_setor WHERE meta_id = ${goalId} ORDER BY id
+      `),
+      this.database.$queryRaw<GoalCostDetailRow[]>(Prisma.sql`
+        SELECT COALESCE(description, 'Custo') AS description,
+               ROUND(COALESCE(valor_custo, 0)::numeric, 2)::text AS value
+        FROM meta_custo WHERE meta_id = ${goalId} ORDER BY id
+      `),
+    ]);
+    return goalDetailResponseSchema.parse({
+      ...goal,
+      vendors,
+      sectors,
+      costs,
+    });
   }
 
   async createGoal(
@@ -470,17 +555,25 @@ export class CatalogService {
           "Um dos vendedores não pertence à empresa",
         );
     }
+    const sectorIds = input.sectors.map((item) => item.id);
+    if (sectorIds.length) {
+      const rows = await this.database.$queryRaw<CountRow[]>(
+        Prisma.sql`SELECT COUNT(*)::bigint AS total FROM setor WHERE unit_id=${unitId} AND id IN (${Prisma.join(sectorIds)})`,
+      );
+      if (Number(rows[0]?.total ?? 0n) !== sectorIds.length)
+        throw new BadRequestException("Um dos setores não existe");
+    }
     await this.database.$transaction(async (transaction) => {
       const duplicates = await transaction.$queryRaw<CountRow[]>(
-        Prisma.sql`SELECT COUNT(*)::bigint AS total FROM meta WHERE system_unit_id=${unitId} AND status_id=1 AND mes_ano=${input.competencia}`,
+        Prisma.sql`SELECT COUNT(*)::bigint AS total FROM meta WHERE unit_id=${unitId} AND status='open' AND mes_ano=${input.competencia}`,
       );
       if (Number(duplicates[0]?.total ?? 0n) > 0)
         throw new BadRequestException(
           "Já existe uma meta aberta para esta competência",
         );
       const inserted = await transaction.$queryRaw<IdRow[]>(Prisma.sql`
-        INSERT INTO meta (system_unit_id,status_id,data_inicial,data_final,mes_ano)
-        VALUES (${unitId},1,${input.dataInicial}::date,${input.dataFinal}::date,${input.competencia}) RETURNING id
+        INSERT INTO meta (unit_id,status,data_inicial,data_final,mes_ano)
+        VALUES (${unitId},'open',${input.dataInicial}::date,${input.dataFinal}::date,${input.competencia}) RETURNING id
       `);
       const goalId = inserted[0]!.id;
       for (const vendor of input.vendors)
@@ -495,13 +588,110 @@ export class CatalogService {
       `);
       for (const cost of input.costs)
         await transaction.$executeRaw(Prisma.sql`
-        INSERT INTO meta_custo (meta_id,descricao,valor_custo) VALUES (${goalId},${cost.description},${cost.value}::numeric)
+        INSERT INTO meta_custo (meta_id,description,valor_custo) VALUES (${goalId},${cost.description},${cost.value}::numeric)
       `);
       await transaction.auditLog.create({
         data: {
           tenantId: principal.activeTenantId,
           actorUserId: principal.userId,
           action: "goals.created",
+          entityType: "goal",
+          entityId: String(goalId),
+          correlationId: randomUUID(),
+          metadata: {
+            competencia: input.competencia,
+            vendors: input.vendors.length,
+            sectors: input.sectors.length,
+            costs: input.costs.length,
+          },
+        },
+      });
+    });
+    return this.goals(principal, { page: 1, pageSize: 20 });
+  }
+
+  async updateGoal(
+    principal: AuthPrincipal,
+    goalId: number,
+    input: GoalCreateInput,
+  ): Promise<GoalListResponse> {
+    const unitId = this.unit(principal);
+    const vendorIds = input.vendors.map((item) => item.id);
+    if (vendorIds.length) {
+      const rows = await this.database.$queryRaw<CountRow[]>(
+        Prisma.sql`SELECT COUNT(*)::bigint AS total FROM vendedores WHERE unit_id=${unitId} AND id IN (${Prisma.join(vendorIds)})`,
+      );
+      if (Number(rows[0]?.total ?? 0n) !== vendorIds.length)
+        throw new BadRequestException(
+          "Um dos vendedores não pertence à empresa",
+        );
+    }
+    const sectorIds = input.sectors.map((item) => item.id);
+    if (sectorIds.length) {
+      const rows = await this.database.$queryRaw<CountRow[]>(
+        Prisma.sql`SELECT COUNT(*)::bigint AS total FROM setor WHERE unit_id=${unitId} AND id IN (${Prisma.join(sectorIds)})`,
+      );
+      if (Number(rows[0]?.total ?? 0n) !== sectorIds.length)
+        throw new BadRequestException("Um dos setores não existe");
+    }
+    await this.database.$transaction(async (transaction) => {
+      const goals = await transaction.$queryRaw<GoalStatusOnlyRow[]>(Prisma.sql`
+        SELECT id, CASE status WHEN 'open' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END AS "statusId" FROM meta
+        WHERE id = ${goalId} AND unit_id = ${unitId}
+        FOR UPDATE
+      `);
+      if (!goals[0]) throw new BadRequestException("Meta não encontrada");
+      if (goals[0].statusId !== 1)
+        throw new BadRequestException(
+          "Somente metas abertas podem ser editadas",
+        );
+      const duplicates = await transaction.$queryRaw<CountRow[]>(Prisma.sql`
+        SELECT COUNT(*)::bigint AS total FROM meta
+        WHERE unit_id = ${unitId}
+          AND status = 'open'
+          AND mes_ano = ${input.competencia}
+          AND id <> ${goalId}
+      `);
+      if (Number(duplicates[0]?.total ?? 0n) > 0)
+        throw new BadRequestException(
+          "Já existe outra meta aberta para esta competência",
+        );
+      await transaction.$executeRaw(Prisma.sql`
+        UPDATE meta
+        SET mes_ano = ${input.competencia},
+            data_inicial = ${input.dataInicial}::date,
+            data_final = ${input.dataFinal}::date
+        WHERE id = ${goalId} AND unit_id = ${unitId}
+      `);
+      await transaction.$executeRaw(
+        Prisma.sql`DELETE FROM meta_vendedores WHERE meta_id = ${goalId}`,
+      );
+      await transaction.$executeRaw(
+        Prisma.sql`DELETE FROM meta_setor WHERE meta_id = ${goalId}`,
+      );
+      await transaction.$executeRaw(
+        Prisma.sql`DELETE FROM meta_custo WHERE meta_id = ${goalId}`,
+      );
+      for (const vendor of input.vendors)
+        await transaction.$executeRaw(Prisma.sql`
+          INSERT INTO meta_vendedores (meta_id,vendedores_id,valor_meta,tipo_comissao,comissao)
+          VALUES (${goalId},${vendor.id},${vendor.value}::numeric,${vendor.commissionType},${vendor.commission}::numeric)
+        `);
+      for (const sector of input.sectors)
+        await transaction.$executeRaw(Prisma.sql`
+          INSERT INTO meta_setor (meta_id,setor_id,valor_meta,tipo_comissao,comissao)
+          VALUES (${goalId},${sector.id},${sector.value}::numeric,${sector.commissionType},${sector.commission}::numeric)
+        `);
+      for (const cost of input.costs)
+        await transaction.$executeRaw(Prisma.sql`
+          INSERT INTO meta_custo (meta_id,description,valor_custo)
+          VALUES (${goalId},${cost.description},${cost.value}::numeric)
+        `);
+      await transaction.auditLog.create({
+        data: {
+          tenantId: principal.activeTenantId,
+          actorUserId: principal.userId,
+          action: "goals.updated",
           entityType: "goal",
           entityId: String(goalId),
           correlationId: randomUUID(),
@@ -526,7 +716,7 @@ export class CatalogService {
       const rows = await transaction.$queryRaw<GoalLifecycleRow[]>(Prisma.sql`
         SELECT
           id,
-          status_id AS "statusId",
+          CASE status WHEN 'open' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END AS "statusId",
           TO_CHAR(
             (DATE_TRUNC('month', COALESCE(data_inicial, data_final)) + INTERVAL '1 month')::date,
             'YYYY-MM-DD'
@@ -540,7 +730,7 @@ export class CatalogService {
             'MM/YYYY'
           ) AS "nextCompetence"
         FROM meta
-        WHERE id = ${goalId} AND system_unit_id = ${unitId}
+        WHERE id = ${goalId} AND unit_id = ${unitId}
         FOR UPDATE
       `);
       const goal = rows[0];
@@ -571,29 +761,29 @@ export class CatalogService {
       const existing = await transaction.$queryRaw<IdRow[]>(Prisma.sql`
         SELECT id
         FROM meta
-        WHERE system_unit_id = ${unitId}
+        WHERE unit_id = ${unitId}
           AND mes_ano = ${goal.nextCompetence}
         ORDER BY id
         LIMIT 1
       `);
 
       await transaction.$executeRaw(Prisma.sql`
-        UPDATE meta SET status_id = 2
-        WHERE id = ${goalId} AND system_unit_id = ${unitId}
+        UPDATE meta SET status = 'completed', completed_at = NOW()
+        WHERE id = ${goalId} AND unit_id = ${unitId}
       `);
 
       let nextGoalId = existing[0]?.id ?? null;
       if (nextGoalId === null) {
         const inserted = await transaction.$queryRaw<IdRow[]>(Prisma.sql`
           INSERT INTO meta (
-            system_unit_id,
-            status_id,
+            unit_id,
+            status,
             data_inicial,
             data_final,
             mes_ano
           ) VALUES (
             ${unitId},
-            1,
+            'open',
             ${goal.nextStart}::date,
             ${goal.nextEnd}::date,
             ${goal.nextCompetence}
@@ -602,8 +792,8 @@ export class CatalogService {
         `);
         nextGoalId = inserted[0]!.id;
         await transaction.$executeRaw(Prisma.sql`
-          INSERT INTO meta_custo (meta_id, descricao, valor_custo)
-          SELECT ${nextGoalId}, descricao, valor_custo
+          INSERT INTO meta_custo (meta_id, description, valor_custo)
+          SELECT ${nextGoalId}, description, valor_custo
           FROM meta_custo
           WHERE meta_id = ${goalId}
         `);
@@ -643,29 +833,20 @@ export class CatalogService {
         `);
       }
 
-      await transaction.$executeRaw(Prisma.sql`
-        INSERT INTO log_crontab (
-          empresa_id,
-          classe,
-          metodo,
-          data_hora,
-          status,
-          mensagem,
-          observacao
-        ) VALUES (
-          ${unitId},
-          'MetaService',
-          'finalizarMeta',
-          NOW(),
-          0,
-          ${`Meta ${goalId} finalizada.`},
-          ${
-            existing.length
-              ? `A meta ${nextGoalId} de ${goal.nextCompetence} já existia e não foi duplicada.`
-              : `Meta ${nextGoalId} de ${goal.nextCompetence} criada com sucesso.`
-          }
-        )
-      `);
+      await transaction.operationalLog.create({
+        data: {
+          tenantId: unitId,
+          jobType: "goals.lifecycle",
+          operation: "finalize",
+          status: "completed",
+          message: `Meta ${goalId} finalizada.`,
+          details: {
+            nextGoalId,
+            nextCompetence: goal.nextCompetence,
+            nextGoalAlreadyExisted: existing.length > 0,
+          },
+        },
+      });
       await transaction.auditLog.create({
         data: {
           tenantId: principal.activeTenantId,
@@ -692,9 +873,9 @@ export class CatalogService {
     const unitId = this.unit(principal);
     await this.database.$transaction(async (transaction) => {
       const rows = await transaction.$queryRaw<GoalStatusOnlyRow[]>(Prisma.sql`
-        SELECT id, status_id AS "statusId"
+        SELECT id, CASE status WHEN 'open' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END AS "statusId"
         FROM meta
-        WHERE id = ${goalId} AND system_unit_id = ${unitId}
+        WHERE id = ${goalId} AND unit_id = ${unitId}
         FOR UPDATE
       `);
       const goal = rows[0];
@@ -707,8 +888,8 @@ export class CatalogService {
           "Uma meta finalizada não pode ser cancelada",
         );
       await transaction.$executeRaw(Prisma.sql`
-        UPDATE meta SET status_id = 3
-        WHERE id = ${goalId} AND system_unit_id = ${unitId}
+        UPDATE meta SET status = 'cancelled', cancelled_at = NOW()
+        WHERE id = ${goalId} AND unit_id = ${unitId}
       `);
       await transaction.auditLog.create({
         data: {
@@ -738,6 +919,13 @@ export class CatalogService {
       scheduleRows,
       surveyRows,
       authorizationRows,
+      nfeSyncPolicy,
+      operationNatures,
+      salesChannels,
+      sellers,
+      customers,
+      products,
+      cfopRows,
     ] = await Promise.all([
       this.database.integrationConfig.findMany({
         where: { tenantId: principal.activeTenantId },
@@ -760,86 +948,106 @@ export class CatalogService {
           createdAt: true,
         },
       }),
-      this.database.$queryRaw<LegacyTokenRow[]>(Prisma.sql`
-          SELECT
-            access_token IS NOT NULL AND BTRIM(access_token) <> '' AS configured,
-            status,
-            updated_at AS "updatedAt"
-          FROM bling_tokens
-          WHERE unit_id = ${unitId}
-          ORDER BY updated_at DESC NULLS LAST
-          LIMIT 1
-        `),
-      this.database.$queryRaw<LegacyTokenRow[]>(Prisma.sql`
-          SELECT
-            access_token IS NOT NULL AND BTRIM(access_token) <> '' AS configured,
-            status,
-            updated_at AS "updatedAt"
-          FROM mercadolivre_tokens
-          WHERE unit_id = ${unitId}
-          ORDER BY updated_at DESC NULLS LAST
-          LIMIT 1
-        `),
-      this.database.$queryRaw<LegacyApChatRow[]>(Prisma.sql`
-          SELECT
-            token IS NOT NULL AND BTRIM(token) <> '' AS configured,
-            COALESCE(msg, 'N') = 'S' AS "messagesEnabled",
-            NULLIF(BTRIM(uuid), '') AS uuid,
-            NULLIF(BTRIM(num_envio), '') AS "sendNumber",
-            NULLIF(BTRIM(num_relatorio), '') AS "reportNumber",
-            NULLIF(BTRIM(num_teste), '') AS "testNumber"
-          FROM ap_chat
-          WHERE unit_id = ${unitId}
-          ORDER BY id DESC
-          LIMIT 1
-        `),
-      this.database.$queryRaw<LegacyLogRow[]>(Prisma.sql`
-          SELECT
-            id,
-            classe AS source,
-            metodo AS method,
-            status,
-            mensagem AS message,
-            data_hora AS "occurredAt"
-          FROM log_crontab
-          WHERE empresa_id = ${unitId}
-          ORDER BY data_hora DESC
-          LIMIT 20
-        `),
-      this.database.$queryRaw<LegacyScheduleRow[]>(Prisma.sql`
-          SELECT id, descricao AS description,
-            ARRAY(SELECT value FROM UNNEST(ARRAY[
-              CASE WHEN h0 = 'S' THEN 0 END, CASE WHEN h1 = 'S' THEN 1 END, CASE WHEN h2 = 'S' THEN 2 END,
-              CASE WHEN h3 = 'S' THEN 3 END, CASE WHEN h4 = 'S' THEN 4 END, CASE WHEN h5 = 'S' THEN 5 END,
-              CASE WHEN h6 = 'S' THEN 6 END, CASE WHEN h7 = 'S' THEN 7 END, CASE WHEN h8 = 'S' THEN 8 END,
-              CASE WHEN h9 = 'S' THEN 9 END, CASE WHEN h10 = 'S' THEN 10 END, CASE WHEN h11 = 'S' THEN 11 END,
-              CASE WHEN h12 = 'S' THEN 12 END, CASE WHEN h13 = 'S' THEN 13 END, CASE WHEN h14 = 'S' THEN 14 END,
-              CASE WHEN h15 = 'S' THEN 15 END, CASE WHEN h16 = 'S' THEN 16 END, CASE WHEN h17 = 'S' THEN 17 END,
-              CASE WHEN h18 = 'S' THEN 18 END, CASE WHEN h19 = 'S' THEN 19 END, CASE WHEN h20 = 'S' THEN 20 END,
-              CASE WHEN h21 = 'S' THEN 21 END, CASE WHEN h22 = 'S' THEN 22 END, CASE WHEN h23 = 'S' THEN 23 END
-            ]) AS value WHERE value IS NOT NULL) AS hours
-          FROM crontab_config WHERE unit_id = ${unitId} ORDER BY id LIMIT 1
-        `),
-      this.database.$queryRaw<LegacySurveyRow[]>(Prisma.sql`
-          SELECT id, COALESCE(habilitar, 'N') = 'S' AS enabled, tempo_dia_env AS "daysAfterShipping",
-            tempo_hora_env AS hour, NULLIF(BTRIM(link), '') AS link, NULLIF(BTRIM(msg), '') AS message
-          FROM pesquisa_satisfacao WHERE unit_id = ${unitId} ORDER BY id LIMIT 1
-        `),
-      this.database.$queryRaw<AuthorizationRow[]>(Prisma.sql`
-          SELECT
-            NULLIF(BTRIM(client_id), '') IS NOT NULL AS bling,
-            NULLIF(BTRIM(ml_client_id), '') IS NOT NULL AS "mercadoLivre"
-          FROM system_unit WHERE id=${unitId} LIMIT 1
-        `),
+      this.database.oAuthCredential.findUnique({
+        where: { tenantId_kind: { tenantId: unitId, kind: "bling" } },
+      }),
+      this.database.oAuthCredential.findUnique({
+        where: {
+          tenantId_kind: { tenantId: unitId, kind: "mercado_livre" },
+        },
+      }),
+      this.database.apChatConfig.findUnique({ where: { tenantId: unitId } }),
+      this.database.operationalLog.findMany({
+        where: { tenantId: unitId },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      this.database.operationalSchedule.findFirst({
+        where: { tenantId: unitId, jobType: "bling.sync-nfe" },
+      }),
+      this.database.satisfactionConfig.findUnique({
+        where: { tenantId: unitId },
+      }),
+      this.database.oAuthCredential.findMany({ where: { tenantId: unitId } }),
+      this.database.nfeSyncPolicy.findUnique({ where: { tenantId: unitId } }),
+      this.database.operationNature.findMany({
+        where: { tenantId: unitId, active: true },
+        select: { externalBlingId: true, description: true },
+        orderBy: { description: "asc" },
+        take: 500,
+      }),
+      this.database.salesChannel.findMany({
+        where: {
+          tenantId: unitId,
+          active: true,
+          externalBlingId: { not: null },
+        },
+        select: { externalBlingId: true, description: true, type: true },
+        orderBy: { description: "asc" },
+        take: 500,
+      }),
+      this.database.seller.findMany({
+        where: {
+          tenantId: unitId,
+          active: true,
+          externalBlingId: { not: null },
+        },
+        select: { externalBlingId: true, name: true },
+        orderBy: { name: "asc" },
+        take: 500,
+      }),
+      this.database.contact.findMany({
+        where: { tenantId: unitId },
+        select: { externalBlingId: true, name: true, documentNumber: true },
+        orderBy: { name: "asc" },
+        take: 500,
+      }),
+      this.database.product.findMany({
+        where: { tenantId: unitId, active: true, sku: { not: null } },
+        select: { sku: true, name: true, ncm: true },
+        orderBy: { name: "asc" },
+        take: 1000,
+      }),
+      this.database.invoiceItem.findMany({
+        where: { tenantId: unitId, cfop: { not: null } },
+        distinct: ["cfop"],
+        select: { cfop: true },
+        orderBy: { cfop: "asc" },
+        take: 500,
+      }),
     ]);
 
     const configMap = new Map(configs.map((config) => [config.kind, config]));
-    const bling = blingRows[0];
-    const mercadoLivre = mercadoLivreRows[0];
-    const apchat = apChatRows[0];
-    const schedule = scheduleRows[0];
-    const survey = surveyRows[0];
-    const authorization = authorizationRows[0];
+    const bling = this.oauthStatus(blingRows);
+    const mercadoLivre = this.oauthStatus(mercadoLivreRows);
+    const apchat = apChatRows
+      ? {
+          configured: apChatRows.tokenCiphertext !== null,
+          messagesEnabled: apChatRows.sendMessages,
+          uuid: decryptSecret(apChatRows.workspaceIdCiphertext),
+          sendNumber: apChatRows.invoicePhone,
+          reportNumber: apChatRows.reportPhone,
+          testNumber: apChatRows.testPhone,
+        }
+      : undefined;
+    const schedule = scheduleRows;
+    const survey = surveyRows
+      ? {
+          enabled: surveyRows.enabled,
+          daysAfterShipping: surveyRows.delayDays,
+          hour: surveyRows.delayHours,
+          link: surveyRows.link,
+          message: surveyRows.message,
+        }
+      : undefined;
+    const authorization = {
+      bling:
+        authorizationRows.some((row) => row.kind === "bling") ||
+        Boolean(process.env["BLING_CLIENT_ID"]),
+      mercadoLivre:
+        authorizationRows.some((row) => row.kind === "mercado_livre") ||
+        Boolean(process.env["MERCADO_LIVRE_CLIENT_ID"]),
+    };
     return operationsOverviewSchema.parse({
       integrations: [
         {
@@ -888,8 +1096,12 @@ export class CatalogService {
         errorMessage: job.errorMessage,
       })),
       legacyLogs: legacyLogs.map((log) => ({
-        ...log,
-        occurredAt: log.occurredAt.toISOString(),
+        id: Number(log.id),
+        source: log.jobType,
+        method: log.operation,
+        status: Number(log.status) || 0,
+        message: log.message,
+        occurredAt: log.createdAt.toISOString(),
       })),
       auditLogs: auditLogs.map((log) => ({
         ...log,
@@ -905,7 +1117,7 @@ export class CatalogService {
         },
         schedule: {
           hours: schedule?.hours ?? [],
-          description: schedule?.description ?? null,
+          description: schedule?.name ?? null,
         },
         apchat: {
           configured: apchat?.configured ?? false,
@@ -922,6 +1134,67 @@ export class CatalogService {
           link: survey?.link ?? null,
           message: survey?.message ?? null,
         },
+        nfeSyncPolicy: nfeSyncPolicy
+          ? {
+              ...nfeSyncPolicy,
+              minimumTotal:
+                nfeSyncPolicy.minimumTotal === null
+                  ? null
+                  : Number(nfeSyncPolicy.minimumTotal),
+              maximumTotal:
+                nfeSyncPolicy.maximumTotal === null
+                  ? null
+                  : Number(nfeSyncPolicy.maximumTotal),
+            }
+          : defaultNfeSyncPolicy(),
+        nfeSyncOptions: {
+          natures: operationNatures.map((nature) => ({
+            value: nature.externalBlingId,
+            label: nature.description,
+          })),
+          salesChannels: salesChannels.flatMap((channel) =>
+            channel.externalBlingId
+              ? [
+                  {
+                    value: channel.externalBlingId,
+                    label: channel.description,
+                    detail: channel.type,
+                  },
+                ]
+              : [],
+          ),
+          sellers: sellers.flatMap((seller) =>
+            seller.externalBlingId
+              ? [{ value: seller.externalBlingId, label: seller.name }]
+              : [],
+          ),
+          customers: customers.map((customer) => ({
+            value: customer.externalBlingId,
+            label: customer.name,
+            detail: customer.documentNumber,
+          })),
+          products: uniquePolicyOptions(
+            products.flatMap((product) =>
+              product.sku
+                ? [
+                    {
+                      value: product.sku,
+                      label: product.name,
+                      detail: product.ncm,
+                    },
+                  ]
+                : [],
+            ),
+          ),
+          cfops: cfopRows.flatMap((row) =>
+            row.cfop === null ? [] : [String(row.cfop)],
+          ),
+          ncms: [
+            ...new Set(
+              products.flatMap((product) => (product.ncm ? [product.ncm] : [])),
+            ),
+          ].sort(),
+        },
       },
     });
   }
@@ -930,42 +1203,55 @@ export class CatalogService {
     principal: AuthPrincipal,
     kind: "bling" | "mercado_livre",
   ): Promise<OauthAuthorizationResponse> {
-    const unitId = this.unit(principal);
-    const rows = await this.database.$queryRaw<
-      AuthorizationCredentialRow[]
-    >(Prisma.sql`
-      SELECT
-        NULLIF(BTRIM(client_id), '') AS "clientId",
-        NULLIF(BTRIM(ml_client_id), '') AS "mercadoLivreClientId"
-      FROM system_unit WHERE id=${unitId} LIMIT 1
-    `);
-    const credentials = rows[0];
+    const tenantId = this.unit(principal);
+    const existing = await this.database.oAuthCredential.findUnique({
+      where: { tenantId_kind: { tenantId, kind } },
+    });
+    const prefix = kind === "bling" ? "BLING" : "MERCADO_LIVRE";
+    const clientId =
+      (existing?.clientIdCiphertext
+        ? decryptSecret(existing.clientIdCiphertext)
+        : undefined) ?? process.env[`${prefix}_CLIENT_ID`];
     const state = randomUUID();
+    await this.database.oAuthCredential.upsert({
+      where: { tenantId_kind: { tenantId, kind } },
+      create: {
+        tenantId,
+        kind,
+        status: "pending",
+        authorizationStateHash: createHash("sha256")
+          .update(state)
+          .digest("hex"),
+        authorizationExpiresAt: new Date(Date.now() + 10 * 60_000),
+      },
+      update: {
+        status: "pending",
+        authorizationStateHash: createHash("sha256")
+          .update(state)
+          .digest("hex"),
+        authorizationExpiresAt: new Date(Date.now() + 10 * 60_000),
+        lastError: null,
+      },
+    });
     let url: URL;
     if (kind === "bling") {
-      if (!credentials?.clientId)
+      if (!clientId)
         throw new BadRequestException(
           "Client ID do Bling não configurado para esta empresa",
         );
-      await this.database.$executeRaw(Prisma.sql`
-        UPDATE system_unit SET state=${state}, used_at=NULL WHERE id=${unitId}
-      `);
       url = new URL("https://www.bling.com.br/Api/v3/oauth/authorize");
       url.searchParams.set("response_type", "code");
-      url.searchParams.set("client_id", credentials.clientId);
+      url.searchParams.set("client_id", clientId);
       url.searchParams.set("state", state);
     } else {
       const redirectUri = process.env["MERCADO_LIVRE_REDIRECT_URI"];
-      if (!credentials?.mercadoLivreClientId || !this.isHttpUrl(redirectUri))
+      if (!clientId || !this.isHttpUrl(redirectUri))
         throw new BadRequestException(
           "OAuth do Mercado Livre não configurado para esta empresa",
         );
-      await this.database.$executeRaw(Prisma.sql`
-        UPDATE system_unit SET ml_state=${state}, ml_used_at=NULL WHERE id=${unitId}
-      `);
       url = new URL("https://auth.mercadolivre.com.br/authorization");
       url.searchParams.set("response_type", "code");
-      url.searchParams.set("client_id", credentials.mercadoLivreClientId);
+      url.searchParams.set("client_id", clientId);
       url.searchParams.set("redirect_uri", redirectUri);
       url.searchParams.set("state", state);
     }
@@ -980,6 +1266,24 @@ export class CatalogService {
     input: OperationsJobRequest,
   ): Promise<QueuedJobResponse> {
     this.unit(principal);
+    if (input.jobType.startsWith("bling.sync-")) {
+      const existing = await this.database.jobExecution.findFirst({
+        where: {
+          tenantId: principal.activeTenantId,
+          jobType: input.jobType,
+          status: { in: ["queued", "active"] },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (existing) {
+        return queuedJobResponseSchema.parse({
+          id: existing.id,
+          correlationId: existing.correlationId,
+          jobType: input.jobType,
+          status: "queued",
+        });
+      }
+    }
     const id = randomUUID();
     const correlationId = randomUUID();
     const payload = operationPayload(input, id);
@@ -1049,64 +1353,81 @@ export class CatalogService {
     const unitId = this.unit(principal);
     await this.database.$transaction(async (transaction) => {
       if (input.kind === "schedule") {
-        const rows = await transaction.$queryRaw<IdRow[]>(
-          Prisma.sql`SELECT id FROM crontab_config WHERE unit_id = ${unitId} ORDER BY id LIMIT 1`,
-        );
-        const flags = Array.from({ length: 24 }, (_, hour) =>
-          input.hours.includes(hour) ? "S" : "N",
-        );
         const description =
           "Seleciona quais horas do dia as notas serão sincronizadas e enviadas automaticamente.";
-        if (rows[0])
-          await transaction.$executeRaw(Prisma.sql`
-          UPDATE crontab_config SET descricao=${description}, metodo_chamado='onSincronizar',
-            h0=${flags[0]},h1=${flags[1]},h2=${flags[2]},h3=${flags[3]},h4=${flags[4]},h5=${flags[5]},
-            h6=${flags[6]},h7=${flags[7]},h8=${flags[8]},h9=${flags[9]},h10=${flags[10]},h11=${flags[11]},
-            h12=${flags[12]},h13=${flags[13]},h14=${flags[14]},h15=${flags[15]},h16=${flags[16]},h17=${flags[17]},
-            h18=${flags[18]},h19=${flags[19]},h20=${flags[20]},h21=${flags[21]},h22=${flags[22]},h23=${flags[23]}
-          WHERE id=${rows[0].id} AND unit_id=${unitId}
-        `);
-        else
-          await transaction.$executeRaw(Prisma.sql`
-          INSERT INTO crontab_config (unit_id,descricao,metodo_chamado,h0,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12,h13,h14,h15,h16,h17,h18,h19,h20,h21,h22,h23)
-          VALUES (${unitId},${description},'onSincronizar',${flags[0]},${flags[1]},${flags[2]},${flags[3]},${flags[4]},${flags[5]},${flags[6]},${flags[7]},${flags[8]},${flags[9]},${flags[10]},${flags[11]},${flags[12]},${flags[13]},${flags[14]},${flags[15]},${flags[16]},${flags[17]},${flags[18]},${flags[19]},${flags[20]},${flags[21]},${flags[22]},${flags[23]})
-        `);
+        await transaction.operationalSchedule.upsert({
+          where: {
+            tenantId_jobType: { tenantId: unitId, jobType: "bling.sync-nfe" },
+          },
+          create: {
+            tenantId: unitId,
+            jobType: "bling.sync-nfe",
+            name: description,
+            hours: input.hours,
+          },
+          update: { name: description, hours: input.hours, enabled: true },
+        });
       }
       if (input.kind === "apchat") {
-        const rows = await transaction.$queryRaw<IdRow[]>(
-          Prisma.sql`SELECT id FROM ap_chat WHERE unit_id=${unitId} ORDER BY id DESC LIMIT 1`,
-        );
+        const current = await transaction.apChatConfig.findUnique({
+          where: { tenantId: unitId },
+        });
         const token = input.token ?? null;
-        if (!rows[0] && !token)
+        if (!current && !token)
           throw new BadRequestException(
             "Informe o token na primeira configuração do APChat",
           );
-        if (rows[0])
-          await transaction.$executeRaw(Prisma.sql`
-          UPDATE ap_chat SET uuid=${input.uuid}, token=COALESCE(${token}, token), num_envio=${input.sendNumber},
-            num_relatorio=${input.reportNumber}, num_teste=${input.testNumber}, msg=${input.messagesOpen ? "S" : "N"}
-          WHERE id=${rows[0].id} AND unit_id=${unitId}
-        `);
-        else
-          await transaction.$executeRaw(Prisma.sql`
-          INSERT INTO ap_chat (unit_id,uuid,token,num_envio,num_relatorio,num_teste,msg)
-          VALUES (${unitId},${input.uuid},${token},${input.sendNumber},${input.reportNumber},${input.testNumber},${input.messagesOpen ? "S" : "N"})
-        `);
+        await transaction.apChatConfig.upsert({
+          where: { tenantId: unitId },
+          create: {
+            tenantId: unitId,
+            workspaceIdCiphertext: encryptSecret(input.uuid),
+            tokenCiphertext: encryptSecret(token!),
+            invoicePhone: input.sendNumber,
+            reportPhone: input.reportNumber,
+            testPhone: input.testNumber,
+            sendMessages: input.messagesOpen,
+            enabled: true,
+          },
+          update: {
+            workspaceIdCiphertext: encryptSecret(input.uuid),
+            ...(token ? { tokenCiphertext: encryptSecret(token) } : {}),
+            invoicePhone: input.sendNumber,
+            reportPhone: input.reportNumber,
+            testPhone: input.testNumber,
+            sendMessages: input.messagesOpen,
+            enabled: true,
+          },
+        });
       }
       if (input.kind === "satisfaction") {
-        const rows = await transaction.$queryRaw<IdRow[]>(
-          Prisma.sql`SELECT id FROM pesquisa_satisfacao WHERE unit_id=${unitId} ORDER BY id LIMIT 1`,
-        );
-        if (rows[0])
-          await transaction.$executeRaw(Prisma.sql`
-          UPDATE pesquisa_satisfacao SET habilitar=${input.enabled ? "S" : "N"}, tempo_dia_env=${input.daysAfterShipping},
-            tempo_hora_env=${input.hour}, link=${input.link}, msg=${input.message} WHERE id=${rows[0].id} AND unit_id=${unitId}
-        `);
-        else
-          await transaction.$executeRaw(Prisma.sql`
-          INSERT INTO pesquisa_satisfacao (habilitar,tempo_dia_env,tempo_hora_env,msg,link,unit_id)
-          VALUES (${input.enabled ? "S" : "N"},${input.daysAfterShipping},${input.hour},${input.message},${input.link},${unitId})
-        `);
+        await transaction.satisfactionConfig.upsert({
+          where: { tenantId: unitId },
+          create: {
+            tenantId: unitId,
+            enabled: input.enabled,
+            delayDays: input.daysAfterShipping,
+            delayHours: input.hour,
+            link: input.link,
+            message: input.message,
+          },
+          update: {
+            enabled: input.enabled,
+            delayDays: input.daysAfterShipping,
+            delayHours: input.hour,
+            link: input.link,
+            message: input.message,
+          },
+        });
+      }
+      if (input.kind === "nfeSyncPolicy") {
+        const { kind, ...policy } = input;
+        void kind;
+        await transaction.nfeSyncPolicy.upsert({
+          where: { tenantId: unitId },
+          create: { tenantId: unitId, ...policy },
+          update: policy,
+        });
       }
       await transaction.auditLog.create({
         data: {
@@ -1166,7 +1487,7 @@ export class CatalogService {
           ROUND(COALESCE(margem_lucro, 0)::numeric, 2)::text AS "margemLucro",
           tem_calculo AS calculo,
           NULLIF(BTRIM(obs_calculo), '') AS observacao
-        FROM view_nfe
+        FROM invoice_overview
         WHERE ${where}
         ORDER BY data_emissao DESC NULLS LAST, id DESC
         LIMIT ${query.pageSize}
@@ -1184,7 +1505,7 @@ export class CatalogService {
             ELSE COALESCE(SUM(lucro), 0) / SUM(venda_liquido) * 100
           END)::numeric, 2)::text AS "margemSobreVendaLiquida",
           COUNT(*)::bigint AS notas
-        FROM view_nfe
+        FROM invoice_overview
         WHERE ${where}
       `),
     ]);
@@ -1205,13 +1526,142 @@ export class CatalogService {
     });
   }
 
-  private unit(principal: AuthPrincipal): number {
-    if (principal.tenantDemo || principal.legacyUnitId === null) {
+  async financeFilterOptions(
+    principal: AuthPrincipal,
+  ): Promise<InvoiceFilterOptionsResponse> {
+    const unitId = this.unit(principal);
+    const [customers, salesChannels] = await Promise.all([
+      this.database.$queryRaw<InvoiceFilterOptionRow[]>(Prisma.sql`
+        SELECT DISTINCT BTRIM(nome) AS value
+        FROM invoice_overview
+        WHERE unit_id = ${unitId}
+          AND NULLIF(BTRIM(nome), '') IS NOT NULL
+        ORDER BY value
+        LIMIT 500
+      `),
+      this.database.$queryRaw<InvoiceFilterOptionRow[]>(Prisma.sql`
+        SELECT DISTINCT BTRIM(tipo_venda) AS value
+        FROM invoice_overview
+        WHERE unit_id = ${unitId}
+          AND NULLIF(BTRIM(tipo_venda), '') IS NOT NULL
+        ORDER BY value
+        LIMIT 200
+      `),
+    ]);
+    return invoiceFilterOptionsResponseSchema.parse({
+      customers: customers.map((item) => item.value),
+      salesChannels: salesChannels.map((item) => item.value),
+    });
+  }
+
+  async globalSearch(
+    principal: AuthPrincipal,
+    query: string,
+  ): Promise<GlobalSearchResult> {
+    const unitId = this.unit(principal);
+    const term = `%${query}%`;
+    const canInvoices =
+      principal.permissions.includes("nfe:view") ||
+      principal.permissions.includes("finance:view");
+    const [invoices, people, products] = await Promise.all([
+      canInvoices
+        ? this.database.$queryRaw<GlobalInvoiceSearchRow[]>(Prisma.sql`
+            SELECT n.id, COALESCE(n.numero::text, 'Sem número') AS numero,
+              COALESCE(NULLIF(BTRIM(p.nome), ''), 'Cliente não identificado') AS customer,
+              TO_CHAR(n.data_emissao, 'DD/MM/YYYY') AS "issuedAt"
+            FROM nfe n
+            LEFT JOIN pessoa p
+              ON p.id_bling=n.contato_id_bling AND p.unit_id=n.unit_id
+            WHERE n.unit_id=${unitId}
+              AND (COALESCE(n.numero::text, '') ILIKE ${term}
+                OR COALESCE(p.nome, '') ILIKE ${term}
+                OR COALESCE(p.numero_documento, '') ILIKE ${term})
+            ORDER BY n.data_emissao DESC NULLS LAST, n.id DESC
+            LIMIT 6
+          `)
+        : Promise.resolve([]),
+      principal.permissions.includes("people:view")
+        ? this.database.$queryRaw<GlobalPersonSearchRow[]>(Prisma.sql`
+            SELECT p.id, COALESCE(NULLIF(BTRIM(p.nome), ''), 'Pessoa sem nome') AS name,
+              NULLIF(BTRIM(p.numero_documento), '') AS document,
+              NULLIF(BTRIM(p.email), '') AS email
+            FROM pessoa p
+            WHERE p.unit_id=${unitId}
+              AND (COALESCE(p.nome, '') ILIKE ${term}
+                OR COALESCE(p.numero_documento, '') ILIKE ${term}
+                OR COALESCE(p.email, '') ILIKE ${term})
+            ORDER BY p.nome, p.id
+            LIMIT 6
+          `)
+        : Promise.resolve([]),
+      principal.permissions.includes("products:view")
+        ? this.database.$queryRaw<GlobalProductSearchRow[]>(Prisma.sql`
+            SELECT p.id, COALESCE(NULLIF(BTRIM(p.nome), ''), 'Produto sem nome') AS name,
+              NULLIF(BTRIM(p.codigo), '') AS code, NULLIF(BTRIM(p.ncm), '') AS ncm
+            FROM produtos p
+            WHERE p.unit_id=${unitId}
+              AND (COALESCE(p.nome, '') ILIKE ${term}
+                OR COALESCE(p.codigo, '') ILIKE ${term}
+                OR COALESCE(p.ncm, '') ILIKE ${term})
+            ORDER BY p.nome, p.id
+            LIMIT 6
+          `)
+        : Promise.resolve([]),
+    ]);
+    const items: GlobalSearchResult["items"] = [];
+    if (principal.permissions.includes("nfe:view"))
+      items.push(
+        ...invoices.map((invoice) => ({
+          id: `invoice-operational-${invoice.id}`,
+          kind: "invoice-operational" as const,
+          category: "NF-e · Envios",
+          title: `NF-e #${invoice.numero}`,
+          subtitle: `${invoice.customer}${invoice.issuedAt ? ` · ${invoice.issuedAt}` : ""}`,
+          href: `/app/nfe/${invoice.id}`,
+        })),
+      );
+    if (principal.permissions.includes("finance:view"))
+      items.push(
+        ...invoices.map((invoice) => ({
+          id: `invoice-financial-${invoice.id}`,
+          kind: "invoice-financial" as const,
+          category: "NF-e · Lucro",
+          title: `NF-e #${invoice.numero}`,
+          subtitle: `${invoice.customer}${invoice.issuedAt ? ` · ${invoice.issuedAt}` : ""}`,
+          href: `/app/finance/nfe/${invoice.id}`,
+        })),
+      );
+    items.push(
+      ...people.map((person) => ({
+        id: `person-${person.id}`,
+        kind: "person" as const,
+        category: "Pessoas",
+        title: person.name,
+        subtitle: person.document ?? person.email ?? "Cadastro sincronizado",
+        href: `/app/people?search=${encodeURIComponent(person.document ?? person.name)}`,
+      })),
+      ...products.map((product) => ({
+        id: `product-${product.id}`,
+        kind: "product" as const,
+        category: "Produtos",
+        title: product.name,
+        subtitle:
+          [product.code, product.ncm ? `NCM ${product.ncm}` : null]
+            .filter(Boolean)
+            .join(" · ") || "Produto sincronizado",
+        href: `/app/products?search=${encodeURIComponent(product.code ?? product.name)}`,
+      })),
+    );
+    return globalSearchResultSchema.parse({ query, items });
+  }
+
+  private unit(principal: AuthPrincipal): string {
+    if (principal.tenantDemo) {
       throw new BadRequestException(
-        "Empresa autenticada ainda não possui vínculo com o banco legado",
+        "Empresa autenticada não possui configuração operacional",
       );
     }
-    return principal.legacyUnitId;
+    return principal.activeTenantId;
   }
 
   private tokenStatus(row: LegacyTokenRow | undefined): string {
@@ -1220,6 +1670,22 @@ export class CatalogService {
     if (row.status === "R") return "Renovando token";
     if (row.status === "N") return "Reconexão necessária";
     return "Estado não identificado";
+  }
+
+  private oauthStatus(
+    row: {
+      accessTokenCiphertext: Uint8Array | null;
+      status: string;
+      updatedAt: Date;
+    } | null,
+  ): LegacyTokenRow | undefined {
+    if (!row) return undefined;
+    return {
+      configured: row.accessTokenCiphertext !== null,
+      status:
+        row.status === "connected" ? "S" : row.status === "pending" ? "R" : "N",
+      updatedAt: row.updatedAt,
+    };
   }
 
   private isHttpUrl(value: string | null | undefined): value is string {
@@ -1273,6 +1739,10 @@ function operationPayload(
     case "bling.sync-sales-orders":
       return { from: input.from, to: input.to };
     case "bling.sync-products":
+    case "bling.sync-payment-methods":
+    case "bling.sync-sales-channels":
+    case "bling.sync-sellers":
+    case "bling.sync-operation-natures":
       return {};
     case "apchat.deliver":
       return {
@@ -1281,4 +1751,50 @@ function operationPayload(
         idempotencyKey,
       };
   }
+}
+
+function defaultNfeSyncPolicy(): NfeSyncPolicy {
+  return {
+    enabled: true,
+    allowedStatuses: [5, 6],
+    allowedDirections: [1],
+    requireSaleNature: true,
+    excludeReturnNature: true,
+    includedNatureIds: [],
+    excludedNatureIds: [],
+    includedCustomerIds: [],
+    excludedCustomerIds: [],
+    includedCustomerDocuments: [],
+    excludedCustomerDocuments: [],
+    includedCustomerTerms: [],
+    excludedCustomerTerms: ["ebazar"],
+    includedSalesChannelIds: [],
+    excludedSalesChannelIds: [],
+    includedSellerIds: [],
+    excludedSellerIds: [],
+    includedCfops: [],
+    excludedCfops: [],
+    includedSkus: [],
+    excludedSkus: [],
+    includedNcms: [],
+    excludedNcms: [],
+    minimumTotal: null,
+    maximumTotal: null,
+  };
+}
+
+function uniquePolicyOptions<T extends { value: string }>(options: T[]): T[] {
+  const seen = new Set<string>();
+  return options.filter((option) => {
+    const value = option.value.trim();
+    if (!value || seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+
+function goalStatusName(statusId: number): "open" | "completed" | "cancelled" {
+  if (statusId === 1) return "open";
+  if (statusId === 2) return "completed";
+  return "cancelled";
 }

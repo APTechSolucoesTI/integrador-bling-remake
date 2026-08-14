@@ -21,7 +21,9 @@ A ordenação padrão é `data_emissao desc`. A tabela apresenta número, série
 
 `GET /v1/nfe` mantém o limite padrão de 50, paginação, filtros exatos e ordenações permitidas por allowlist. O `unit_id` nunca é aceito da query: ele vem exclusivamente do `legacyUnitId` do tenant autenticado. A resposta é validada por Zod antes de sair da API.
 
-A rota `/app/nfe` é read-only nesta fatia. DANFE vindo do banco só vira link quando o protocolo é HTTP(S); rastreio abre o domínio dos Correios com o código escapado. Envio, ressincronização e alterações permanecem no legado até seus efeitos colaterais serem caracterizados e testados.
+A rota `/app/nfe` mantém os dados fiscais em modo read-only e oferece sincronização por período em `/app/operations`, seleção em lote para ressincronizar e envio das notas prontas pelo APChat. DANFE só vira link quando o protocolo é HTTP(S); rastreio abre os Correios com o código escapado. O worker revalida status, contato e preferência antes do efeito externo e só marca a nota enviada após o aceite idempotente.
+
+A demo pública segue a mesma regra de negócio: não cadastra NF-e nem altera seu status manualmente. O gateway fake sincroniza um resultado determinístico por período, evita duplicatas, permite ressincronizar documentos e registra o histórico local da execução.
 
 ## Divergências legadas registradas
 

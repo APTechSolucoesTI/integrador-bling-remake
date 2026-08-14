@@ -53,7 +53,7 @@ describe("contratos compartilhados", () => {
   it("rejeita dinheiro serializado sem escala explícita", () => {
     expect(
       dashboardSummarySchema.safeParse({
-        source: "legacy-postgresql",
+        source: "product-postgresql",
         tenant: { id: tenantId, name: "Empresa teste", demo: false },
         period: {
           from: "2026-08-01T00:00:00.000Z",

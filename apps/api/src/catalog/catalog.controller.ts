@@ -12,6 +12,7 @@ import {
 } from "@nestjs/common";
 import {
   goalListQuerySchema,
+  globalSearchQuerySchema,
   goalCreateInputSchema,
   operationsJobRequestSchema,
   operationsSettingsUpdateSchema,
@@ -20,7 +21,10 @@ import {
   productListQuerySchema,
   profitabilityQuerySchema,
   type GoalListResponse,
+  type GlobalSearchResult,
+  type GoalDetailResponse,
   type GoalResourcesResponse,
+  type InvoiceFilterOptionsResponse,
   type OperationsOverview,
   type OauthAuthorizationResponse,
   type PeopleListResponse,
@@ -28,18 +32,28 @@ import {
   type ProfitabilityResponse,
   type QueuedJobResponse,
 } from "@integrador/contracts";
-import { RequireRoles, RolesGuard } from "../auth/roles.guard.js";
+import { PermissionsGuard, RequirePermissions } from "../auth/roles.guard.js";
 import { SessionGuard } from "../auth/session.guard.js";
 import type { AuthenticatedRequest } from "../auth/auth.types.js";
 import { CatalogService } from "./catalog.service.js";
 
 @Controller("v1")
-@UseGuards(SessionGuard, RolesGuard)
-@RequireRoles("owner", "admin", "operator", "viewer")
+@UseGuards(SessionGuard, PermissionsGuard)
 export class CatalogController {
   constructor(private readonly catalog: CatalogService) {}
 
+  @Get("search")
+  search(
+    @Req() request: AuthenticatedRequest,
+    @Query() rawQuery: Record<string, string | string[] | undefined>,
+  ): Promise<GlobalSearchResult> {
+    const result = globalSearchQuerySchema.safeParse(rawQuery);
+    if (!result.success) throw new BadRequestException("Busca inválida");
+    return this.catalog.globalSearch(request.auth, result.data.q);
+  }
+
   @Get("products")
+  @RequirePermissions("products:view")
   products(
     @Req() request: AuthenticatedRequest,
     @Query() rawQuery: Record<string, string | string[] | undefined>,
@@ -52,6 +66,7 @@ export class CatalogController {
   }
 
   @Get("people")
+  @RequirePermissions("people:view")
   people(
     @Req() request: AuthenticatedRequest,
     @Query() rawQuery: Record<string, string | string[] | undefined>,
@@ -64,7 +79,7 @@ export class CatalogController {
   }
 
   @Patch("people/:id/messaging")
-  @RequireRoles("owner", "admin", "operator")
+  @RequirePermissions("people:manage")
   async updatePeopleMessaging(
     @Req() request: AuthenticatedRequest,
     @Param("id") rawId: string,
@@ -82,6 +97,7 @@ export class CatalogController {
   }
 
   @Get("goals")
+  @RequirePermissions("goals:view")
   goals(
     @Req() request: AuthenticatedRequest,
     @Query() rawQuery: Record<string, string | string[] | undefined>,
@@ -94,14 +110,27 @@ export class CatalogController {
   }
 
   @Get("goals/resources")
+  @RequirePermissions("goals:view")
   goalResources(
     @Req() request: AuthenticatedRequest,
   ): Promise<GoalResourcesResponse> {
     return this.catalog.goalResources(request.auth);
   }
 
+  @Get("goals/:id")
+  @RequirePermissions("goals:view")
+  goalDetail(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") rawId: string,
+  ): Promise<GoalDetailResponse> {
+    const id = Number(rawId);
+    if (!Number.isInteger(id) || id <= 0)
+      throw new BadRequestException("Meta inválida");
+    return this.catalog.goalDetail(request.auth, id);
+  }
+
   @Post("goals")
-  @RequireRoles("owner", "admin")
+  @RequirePermissions("goals:manage")
   createGoal(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
@@ -112,8 +141,22 @@ export class CatalogController {
     return this.catalog.createGoal(request.auth, result.data);
   }
 
+  @Patch("goals/:id")
+  @RequirePermissions("goals:manage")
+  updateGoal(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") rawId: string,
+    @Body() body: unknown,
+  ): Promise<GoalListResponse> {
+    const id = Number(rawId);
+    const result = goalCreateInputSchema.safeParse(body);
+    if (!Number.isInteger(id) || id <= 0 || !result.success)
+      throw new BadRequestException("Dados da meta inválidos");
+    return this.catalog.updateGoal(request.auth, id, result.data);
+  }
+
   @Post("goals/:id/finalize")
-  @RequireRoles("owner", "admin")
+  @RequirePermissions("goals:manage")
   finalizeGoal(
     @Req() request: AuthenticatedRequest,
     @Param("id") rawId: string,
@@ -125,7 +168,7 @@ export class CatalogController {
   }
 
   @Post("goals/:id/cancel")
-  @RequireRoles("owner", "admin")
+  @RequirePermissions("goals:manage")
   cancelGoal(
     @Req() request: AuthenticatedRequest,
     @Param("id") rawId: string,
@@ -137,6 +180,7 @@ export class CatalogController {
   }
 
   @Get("operations")
+  @RequirePermissions("operations:view")
   operations(
     @Req() request: AuthenticatedRequest,
   ): Promise<OperationsOverview> {
@@ -144,7 +188,7 @@ export class CatalogController {
   }
 
   @Post("operations/jobs")
-  @RequireRoles("owner", "admin", "operator")
+  @RequirePermissions("operations:manage")
   enqueueOperation(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
@@ -156,7 +200,7 @@ export class CatalogController {
   }
 
   @Patch("operations/settings")
-  @RequireRoles("owner", "admin")
+  @RequirePermissions("operations:manage")
   updateOperationsSettings(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
@@ -168,7 +212,7 @@ export class CatalogController {
   }
 
   @Get("operations/authorization/:kind")
-  @RequireRoles("owner", "admin")
+  @RequirePermissions("integrations:manage")
   authorization(
     @Req() request: AuthenticatedRequest,
     @Param("kind") kind: string,
@@ -179,6 +223,7 @@ export class CatalogController {
   }
 
   @Get("finance/profitability")
+  @RequirePermissions("finance:view")
   profitability(
     @Req() request: AuthenticatedRequest,
     @Query() rawQuery: Record<string, string | string[] | undefined>,
@@ -188,5 +233,13 @@ export class CatalogController {
       throw new BadRequestException("Filtros financeiros inválidos");
     }
     return this.catalog.profitability(request.auth, result.data);
+  }
+
+  @Get("finance/filter-options")
+  @RequirePermissions("finance:view")
+  financeFilterOptions(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<InvoiceFilterOptionsResponse> {
+    return this.catalog.financeFilterOptions(request.auth);
   }
 }

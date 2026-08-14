@@ -31,12 +31,13 @@
 .brand > span {
   width: 35px;
   height: 35px;
-  border-radius: 11px;
+  border: 1px solid #6be4bf69;
+  border-radius: 50%;
   display: grid;
   place-items: center;
-  color: #10241d;
-  background: linear-gradient(145deg, #9ff8bb, #5ce992);
-  box-shadow: 0 8px 22px rgba(83, 231, 140, 0.2);
+  color: #72e1bf;
+  background: transparent;
+  box-shadow: none;
 }
 
 .brand div,
@@ -70,6 +71,8 @@
   align-items: center;
   gap: 9px;
   text-align: left;
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .tenant > span {
@@ -302,7 +305,14 @@
   font-size: 12px;
 }
 
+.titleActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .refreshButton,
+.syncButton,
 .applyButton {
   min-height: 38px;
   padding: 0 15px;
@@ -317,6 +327,85 @@
   background: #fff;
   font-size: 11px;
   font-weight: 700;
+}
+
+.bulkActions {
+  min-height: 62px;
+  margin-top: 13px;
+  padding: 10px 12px 10px 16px;
+  border: 1px solid #dfe6e2;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+}
+
+.bulkActions > div {
+  min-width: 0;
+  margin-right: auto;
+  display: grid;
+  gap: 2px;
+}
+
+.bulkActions strong {
+  color: #24372e;
+  font-size: 12px;
+}
+
+.bulkActions span {
+  color: #829087;
+  font-size: 9px;
+}
+
+.bulkActions button {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid #d8e0dc;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #405149;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.bulkActions .sendButton {
+  border-color: #173f2b;
+  color: #fff;
+  background: #173f2b;
+}
+
+.bulkActions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.success {
+  margin-top: 10px;
+  padding: 10px 13px;
+  border: 1px solid #cdebd8;
+  border-radius: 10px;
+  color: #17653a;
+  background: #f1fbf4;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.syncButton {
+  border-color: #173f2b;
+  color: #fff;
+  background: #173f2b;
+  text-decoration: none;
+}
+
+.syncButton:hover {
+  background: #0f3321;
 }
 
 .statusStrip {
@@ -529,6 +618,19 @@
   text-transform: uppercase;
 }
 
+.tableWrap .checkCell {
+  width: 42px;
+  padding-right: 5px;
+  text-align: center;
+}
+
+.checkCell input {
+  width: 16px;
+  height: 16px;
+  accent-color: #237845;
+  cursor: pointer;
+}
+
 .tableWrap td {
   padding: 13px 15px;
   border-top: 1px solid #edf0ee;
@@ -564,6 +666,335 @@
   color: #267d4c;
   text-decoration: none;
   font-weight: 650;
+}
+
+.contactButton,
+.billButton {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.contactButton strong {
+  color: #237845 !important;
+  text-decoration: underline;
+  text-decoration-color: #bddac8;
+  text-underline-offset: 3px;
+}
+
+.statusReason {
+  max-width: 220px;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.billButton {
+  margin-top: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #267d4c;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.drawerBackdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: #0c21184d;
+  backdrop-filter: blur(2px);
+}
+
+.detailDrawer {
+  width: min(610px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  color: #34483d;
+  background: #f7faf8;
+  box-shadow: -18px 0 55px #0c211833;
+  animation: drawerIn 0.22s ease-out;
+}
+
+.detailDrawer > header {
+  min-height: 78px;
+  padding: 17px 20px;
+  border-bottom: 1px solid #dce5e0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+}
+
+.detailDrawer > header span {
+  color: #2c8050;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.detailDrawer > header h2 {
+  margin: 4px 0 0;
+  color: #20382c;
+  font-size: 19px;
+}
+
+.detailDrawer > header button {
+  width: 35px;
+  height: 35px;
+  border: 1px solid #dce4df;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #63736b;
+  background: #fff;
+  cursor: pointer;
+}
+
+.drawerTabs {
+  padding: 10px 16px 0;
+  display: flex;
+  gap: 5px;
+}
+
+.drawerTabs button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #718078;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.drawerTabs .drawerTabActive {
+  border-color: #cfe2d7;
+  color: #226e43;
+  background: #eaf6ee;
+}
+
+.drawerBody {
+  padding: 14px 16px 24px;
+  overflow-y: auto;
+}
+
+.contactSummary {
+  padding: 16px;
+  border: 1px solid #dfe7e2;
+  border-radius: 13px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 17px 22px;
+  background: #fff;
+}
+
+.contactSummary div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.contactSummary small {
+  color: #8a9790;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.contactSummary strong {
+  overflow-wrap: anywhere;
+  color: #30443a;
+  font-size: 10px;
+}
+
+.addressBox,
+.deliveryDiagnosis {
+  margin-top: 9px;
+  padding: 12px 14px;
+  border: 1px solid #dfe7e2;
+  border-radius: 11px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #5d6e65;
+  background: #fff;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.deliveryDiagnosis {
+  border-color: #efdfaf;
+  display: grid;
+  gap: 4px;
+  color: #765f24;
+  background: #fffae9;
+}
+
+.deliveryDiagnosis p {
+  margin: 0;
+}
+
+.contactForm {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid #dfe7e2;
+  border-radius: 13px;
+  display: grid;
+  gap: 15px;
+  background: #fff;
+}
+
+.contactForm > label {
+  display: grid;
+  gap: 6px;
+  color: #4b5e54;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.contactForm input[type="text"],
+.contactForm input:not([type]) {
+  min-height: 41px;
+  padding: 0 11px;
+  border: 1px solid #d7e1dc;
+  border-radius: 9px;
+  color: #2e4338;
+  background: #fff;
+  outline: none;
+}
+
+.contactForm input:focus {
+  border-color: #58a675;
+  box-shadow: 0 0 0 3px #dff3e7;
+}
+
+.contactForm label > small,
+.switchRow small {
+  color: #89958f;
+  font-size: 8px;
+  font-weight: 450;
+}
+
+.contactForm .switchRow {
+  padding: 12px;
+  border: 1px solid #e0e7e3;
+  border-radius: 10px;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.switchRow input {
+  width: 17px;
+  height: 17px;
+  accent-color: #257748;
+}
+
+.switchRow span {
+  display: grid;
+  gap: 2px;
+}
+
+.saveContactButton {
+  min-height: 42px;
+  border: 0;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #fff;
+  background: #174b37;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.saveContactButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.drawerState,
+.drawerError {
+  min-height: 210px;
+  padding: 30px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: #7b8982;
+  text-align: center;
+  font-size: 10px;
+}
+
+.drawerError {
+  color: #a44242;
+}
+
+.billCard {
+  margin-bottom: 8px;
+  padding: 13px;
+  border: 1px solid #dfe7e2;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+}
+
+.billCard > span:first-child {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #28794b;
+  background: #e4f4ea;
+}
+
+.billCard div {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+
+.billCard strong {
+  color: #2e4338;
+  font-size: 11px;
+}
+.billCard small {
+  color: #849089;
+  font-size: 8px;
+}
+.billCard a {
+  color: #267d4c;
+  font-size: 9px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+@keyframes drawerIn {
+  from {
+    transform: translateX(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 .money {
@@ -717,6 +1148,10 @@
     grid-template-columns: repeat(3, minmax(120px, 1fr));
   }
 
+  .bulkActions {
+    flex-wrap: wrap;
+  }
+
   .dbBadge {
     display: none;
   }
@@ -776,7 +1211,14 @@
     display: grid;
   }
 
-  .refreshButton {
+  .titleActions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .refreshButton,
+  .syncButton {
     width: 100%;
   }
 
@@ -798,6 +1240,15 @@
     align-items: flex-start;
     padding-top: 13px;
     padding-bottom: 13px;
+  }
+
+  .bulkActions > div {
+    width: 100%;
+    flex-basis: 100%;
+  }
+
+  .bulkActions button {
+    flex: 1;
   }
 }
 

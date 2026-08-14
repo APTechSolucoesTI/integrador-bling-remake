@@ -1,11 +1,12 @@
 "use client";
 
 import type {
+  NfeBulkActionResponse,
+  InvoiceFilterOptionsResponse,
   ProfitabilityResponse,
   SessionResponse,
 } from "@integrador/contracts";
 import {
-  Bell,
   Boxes,
   Building2,
   CalendarRange,
@@ -14,14 +15,15 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
+  Download,
   FileText,
   Filter,
   Gauge,
   Goal,
-  HelpCircle,
   LoaderCircle,
   LogOut,
   Menu,
+  Orbit,
   Percent,
   RefreshCw,
   Search,
@@ -39,6 +41,10 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
+import { ApplicationSidebar } from "../layout/application-sidebar";
+import { ApplicationHeaderActions } from "../layout/application-header-actions";
+import { ApplicationGlobalSearch } from "../layout/application-global-search";
+import { downloadCsv } from "../../lib/csv";
 import shell from "../nfe/nfe.module.css";
 import styles from "./finance.module.css";
 
@@ -72,6 +78,8 @@ export function FinanceClient() {
   const router = useRouter();
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [data, setData] = useState<ProfitabilityResponse | null>(null);
+  const [filterOptions, setFilterOptions] =
+    useState<InvoiceFilterOptionsResponse>({ customers: [], salesChannels: [] });
   const [draft, setDraft] = useState<FinanceFilters>(currentPeriod);
   const [applied, setApplied] = useState<FinanceFilters>(currentPeriod);
   const [page, setPage] = useState(1);
@@ -79,6 +87,12 @@ export function FinanceClient() {
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<{
+    tone: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const load = useCallback(
     async (filters: FinanceFilters, selectedPage: number) => {
@@ -123,6 +137,28 @@ export function FinanceClient() {
     void load(applied, page);
   }, [applied, load, page, refreshKey]);
 
+  useEffect(() => {
+    let active = true;
+    async function loadFilterOptions() {
+      try {
+        const response = await fetch(`${API_URL}/v1/finance/filter-options`, {
+          credentials: "include",
+        });
+        if (response.ok && active) {
+          setFilterOptions(
+            (await response.json()) as InvoiceFilterOptionsResponse,
+          );
+        }
+      } catch {
+        // A listagem financeira continua utilizável mesmo sem opções auxiliares.
+      }
+    }
+    void loadFilterOptions();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   function applyFilters() {
     setPage(1);
     setApplied({ ...draft });
@@ -141,6 +177,52 @@ export function FinanceClient() {
       credentials: "include",
     }).catch(() => undefined);
     router.replace("/login");
+  }
+
+  function toggleSelected(id: number) {
+    setSelectedIds((current) =>
+      current.includes(id)
+        ? current.filter((selected) => selected !== id)
+        : [...current, id],
+    );
+  }
+
+  function toggleVisible() {
+    const visibleIds = data?.items.map((item) => item.id) ?? [];
+    const allSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    setSelectedIds(allSelected ? [] : visibleIds);
+  }
+
+  async function resyncSelected() {
+    if (selectedIds.length === 0) return;
+    setSyncing(true);
+    setSyncNotice(null);
+    try {
+      const response = await fetch(`${API_URL}/v1/nfe/sync`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      if (!response.ok) throw new Error(await responseMessage(response));
+      const result = (await response.json()) as NfeBulkActionResponse;
+      setSyncNotice({
+        tone: "success",
+        message: `${result.queued.length} NF-e(s) enviada(s) para ressincronização. Custos, impostos, lucro e margem serão recalculados pelo worker.${result.skipped.length ? ` ${result.skipped.length} nota(s) não foi(ram) enfileirada(s).` : ""}`,
+      });
+      setSelectedIds([]);
+    } catch (cause) {
+      setSyncNotice({
+        tone: "error",
+        message:
+          cause instanceof Error
+            ? cause.message
+            : "Não foi possível ressincronizar as NF-e selecionadas.",
+      });
+    } finally {
+      setSyncing(false);
+    }
   }
 
   if (!session && loading) {
@@ -171,21 +253,67 @@ export function FinanceClient() {
     applied.somentePrejuizo ? "prejuízo" : "",
   ].filter(Boolean).length;
 
+  function exportCurrentPage() {
+    if (!data?.items.length) return;
+    downloadCsv(
+      `rentabilidade-${applied.dataInicial}-${applied.dataFinal}-pagina-${data.pagination.page}`,
+      [
+        "NF-e",
+        "Emissão",
+        "Cliente",
+        "Canal",
+        "Venda bruta",
+        "Venda líquida",
+        "Custo líquido",
+        "Impostos",
+        "Taxas",
+        "Frete",
+        "Lucro",
+        "Margem",
+        "Cálculo",
+        "Observação",
+      ],
+      data.items.map((item) => [
+        item.numero,
+        item.dataEmissao,
+        item.nome,
+        item.tipoVenda,
+        item.valor,
+        item.vendaLiquida,
+        item.custoLiquido,
+        item.impostos,
+        item.taxa,
+        item.frete,
+        item.lucro,
+        item.margemLucro,
+        item.calculo,
+        item.observacao,
+      ]),
+    );
+  }
+
   return (
     <main className={shell.shell}>
+      <ApplicationSidebar session={session} open={menuOpen} onLogout={logout} />
       <aside
+        hidden
+        style={{ display: "none" }}
         className={`${shell.sidebar} ${menuOpen ? shell.sidebarOpen : ""}`}
       >
         <Link className={shell.brand} href="/">
           <span>
-            <Workflow size={18} />
+            <Orbit size={18} />
           </span>
           <div>
             <strong>APBling</strong>
             <small>BLING OPERATIONS</small>
           </div>
         </Link>
-        <button className={shell.tenant} type="button" disabled>
+        <Link
+          className={shell.tenant}
+          href="/app/dashboard#organization"
+          title="Trocar organização"
+        >
           <span>
             <Building2 size={16} />
           </span>
@@ -194,7 +322,7 @@ export function FinanceClient() {
             <strong>{session.tenant.name}</strong>
           </div>
           <ChevronDown size={14} />
-        </button>
+        </Link>
         <nav className={shell.nav}>
           <p>OPERAÇÃO</p>
           <Link href="/app/dashboard">
@@ -228,7 +356,7 @@ export function FinanceClient() {
             <Workflow size={17} /> Jobs e integrações
           </Link>
           <p>ADMINISTRAÇÃO</p>
-          {session.role === "owner" || session.role === "admin" ? (
+          {session.permissions.includes("users:manage") ? (
             <Link href="/app/users">
               <ShieldCheck size={17} /> Usuários e acesso
             </Link>
@@ -238,9 +366,6 @@ export function FinanceClient() {
           </Link>
         </nav>
         <div className={shell.sidebarFooter}>
-          <span>
-            <HelpCircle size={16} /> Central de ajuda
-          </span>
           <button type="button" onClick={() => void logout()}>
             <LogOut size={16} /> Sair
           </button>
@@ -256,17 +381,8 @@ export function FinanceClient() {
           >
             <Menu size={20} />
           </button>
-          <div className={styles.topTitle}>
-            <CircleDollarSign size={16} />
-            <span>Inteligência financeira</span>
-          </div>
-          <span className={shell.dbBadge}>
-            <CheckCircle2 size={13} /> Cálculos persistidos no PostgreSQL
-          </span>
-          <button className={shell.iconButton} type="button">
-            <Bell size={17} />
-          </button>
-          <div className={shell.avatar}>{initials(session.user.name)}</div>
+          <ApplicationGlobalSearch />
+          <ApplicationHeaderActions session={session} onLogout={logout} />
         </header>
 
         <div className={shell.content}>
@@ -279,15 +395,25 @@ export function FinanceClient() {
                 processados pelo integrador.
               </p>
             </div>
-            <button
-              className={shell.refreshButton}
-              type="button"
-              onClick={() => setRefreshKey((key) => key + 1)}
-              disabled={loading}
-            >
-              <RefreshCw className={loading ? shell.spin : ""} size={15} />{" "}
-              Atualizar dados
-            </button>
+            <div className={styles.titleActions}>
+              <button
+                className={shell.refreshButton}
+                type="button"
+                disabled={!data?.items.length}
+                onClick={exportCurrentPage}
+              >
+                <Download size={15} /> Exportar CSV
+              </button>
+              <button
+                className={shell.refreshButton}
+                type="button"
+                onClick={() => setRefreshKey((key) => key + 1)}
+                disabled={loading}
+              >
+                <RefreshCw className={loading ? shell.spin : ""} size={15} />{" "}
+                Atualizar dados
+              </button>
+            </div>
           </section>
 
           <section className={styles.summaryGrid}>
@@ -375,23 +501,35 @@ export function FinanceClient() {
               </label>
               <label className={shell.field}>
                 <span>Cliente</span>
-                <input
+                <select
                   value={draft.nome}
                   onChange={(event) =>
                     setDraft({ ...draft, nome: event.target.value })
                   }
-                  placeholder="Nome ou razão social"
-                />
+                >
+                  <option value="">Todos os clientes</option>
+                  {filterOptions.customers.map((customer) => (
+                    <option key={customer} value={customer}>
+                      {customer}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className={shell.field}>
                 <span>Canal de venda</span>
-                <input
+                <select
                   value={draft.tipoVenda}
                   onChange={(event) =>
                     setDraft({ ...draft, tipoVenda: event.target.value })
                   }
-                  placeholder="Ex.: Mercado Livre"
-                />
+                >
+                  <option value="">Todos os canais</option>
+                  {filterOptions.salesChannels.map((salesChannel) => (
+                    <option key={salesChannel} value={salesChannel}>
+                      {salesChannel}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className={shell.field}>
                 <span>Estado do cálculo</span>
@@ -432,6 +570,30 @@ export function FinanceClient() {
             </div>
           </section>
 
+          <section className={shell.bulkActions} aria-label="Ações em lote">
+            <div>
+              <strong>{selectedIds.length} selecionada(s)</strong>
+              <span>Máximo de 50 NF-e por operação</span>
+            </div>
+            <button
+              type="button"
+              disabled={
+                selectedIds.length === 0 ||
+                syncing ||
+                !session.permissions.includes("nfe:manage") ||
+                !session.permissions.includes("nfe:manage")
+              }
+              onClick={() => void resyncSelected()}
+            >
+              {syncing ? (
+                <LoaderCircle className={shell.spin} size={15} />
+              ) : (
+                <RefreshCw size={15} />
+              )}
+              Ressincronizar selecionadas
+            </button>
+          </section>
+
           <section className={shell.tablePanel}>
             <header className={shell.tableHead}>
               <div>
@@ -446,11 +608,42 @@ export function FinanceClient() {
                 {dateLabel(applied.dataFinal)}
               </span>
             </header>
+            {syncNotice ? (
+              <div
+                className={`${styles.syncNotice} ${
+                  syncNotice.tone === "error" ? styles.syncNoticeError : ""
+                }`}
+                role={syncNotice.tone === "error" ? "alert" : "status"}
+              >
+                {syncNotice.tone === "success" ? (
+                  <CheckCircle2 size={15} />
+                ) : (
+                  <TrendingDown size={15} />
+                )}
+                <span>{syncNotice.message}</span>
+                {syncNotice.tone === "success" ? (
+                  <Link href="/app/operations">Acompanhar job</Link>
+                ) : null}
+              </div>
+            ) : null}
             {error ? <div className={shell.error}>{error}</div> : null}
             <div className={`${shell.tableWrap} ${styles.tableWrap}`}>
               <table>
                 <thead>
                   <tr>
+                    <th className={shell.checkCell}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(
+                          data?.items.length &&
+                            data.items.every((item) =>
+                              selectedIds.includes(item.id),
+                            ),
+                        )}
+                        onChange={toggleVisible}
+                        aria-label="Selecionar NF-e visíveis"
+                      />
+                    </th>
                     <th>Nota / emissão</th>
                     <th>Cliente / canal</th>
                     <th>Venda</th>
@@ -464,7 +657,7 @@ export function FinanceClient() {
                 <tbody>
                   {loading && !data ? (
                     <tr>
-                      <td className={shell.empty} colSpan={8}>
+                      <td className={shell.empty} colSpan={9}>
                         <LoaderCircle className={shell.spin} size={21} />
                         Carregando resultados...
                       </td>
@@ -472,16 +665,34 @@ export function FinanceClient() {
                   ) : null}
                   {!loading && data?.items.length === 0 ? (
                     <tr>
-                      <td className={shell.empty} colSpan={8}>
+                      <td className={shell.empty} colSpan={9}>
                         <CircleDollarSign size={21} />
                         Nenhuma nota encontrada neste recorte.
                       </td>
                     </tr>
                   ) : null}
                   {data?.items.map((item) => (
-                    <tr key={item.id}>
+                    <tr
+                      key={item.id}
+                      className={styles.clickableRow}
+                      onClick={() => router.push(`/app/finance/nfe/${item.id}`)}
+                    >
+                      <td className={shell.checkCell}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(item.id)}
+                          onChange={() => toggleSelected(item.id)}
+                          onClick={(event) => event.stopPropagation()}
+                          aria-label={`Selecionar NF-e ${item.numero}`}
+                        />
+                      </td>
                       <td>
-                        <strong>NF-e {item.numero}</strong>
+                        <Link
+                          href={`/app/finance/nfe/${item.id}`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <strong>NF-e {item.numero}</strong>
+                        </Link>
                         <small>
                           {item.dataEmissao
                             ? dateLabel(item.dataEmissao)
@@ -624,11 +835,14 @@ function dateLabel(value: string): string {
   return `${day}/${month}/${year}`;
 }
 
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part[0] ?? "")
-    .join("")
-    .toUpperCase();
+
+async function responseMessage(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as { message?: unknown };
+    if (typeof payload.message === "string") return payload.message;
+    if (Array.isArray(payload.message)) return payload.message.join(". ");
+  } catch {
+    return "Não foi possível concluir a ressincronização.";
+  }
+  return "Não foi possível concluir a ressincronização.";
 }

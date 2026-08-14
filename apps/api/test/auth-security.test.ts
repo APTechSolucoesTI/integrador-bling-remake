@@ -14,7 +14,9 @@ const principal: AuthPrincipal = {
   tenantSlug: "tenant-a",
   tenantDemo: false,
   legacyUnitId: 1,
-  role: "admin",
+  superAdmin: false,
+  masterKeyAccess: false,
+  permissions: [],
   expiresAt: new Date("2026-08-08T18:00:00Z"),
 };
 

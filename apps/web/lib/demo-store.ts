@@ -1,7 +1,9 @@
-export const DEMO_STORAGE_KEY = "apbling:public-demo:v1";
+export const DEMO_STORAGE_KEY = "apbling:public-demo:v9";
 
 export type DemoInvoiceStatus =
   "Autorizada" | "Pendente" | "Em processamento" | "Cancelada";
+export type DemoDeliveryStatus =
+  "Erro" | "Pronto para envio" | "Enviado" | "Mercado livre";
 
 export interface DemoInvoice {
   id: string;
@@ -11,19 +13,22 @@ export interface DemoInvoice {
   issuedAt: string;
   valueCents: number;
   costCents: number;
+  baseCostCents: number;
   taxCents: number;
   status: DemoInvoiceStatus;
+  deliveryStatus: DemoDeliveryStatus;
   hasBoleto: boolean;
   hasTracking: boolean;
+  unlinkedItemCode: string | null;
 }
 
 export interface DemoProduct {
   id: string;
   sku: string;
   name: string;
-  stock: number;
-  minimumStock: number;
-  priceCents: number;
+  ncm: string;
+  costCents: number;
+  ownManufacture: boolean;
   active: boolean;
 }
 
@@ -34,11 +39,49 @@ export interface DemoPerson {
   state: string;
   orders: number;
   totalCents: number;
-  active: boolean;
+  messagingDisabled: boolean;
+}
+
+export type DemoSyncKind =
+  | "nfe"
+  | "nfe-details"
+  | "nfe-delivery"
+  | "nfe-normalization"
+  | "payment-methods"
+  | "sales-channels"
+  | "sellers"
+  | "operation-natures"
+  | "products"
+  | "scheduled-cycle"
+  | "satisfaction";
+
+export interface DemoSyncRun {
+  id: string;
+  kind: DemoSyncKind;
+  from: string | null;
+  to: string | null;
+  processed: number;
+  createdAt: string;
+}
+
+export interface DemoNcmCredit {
+  id: string;
+  ncm: string;
+  rate: number;
+  reduction: number;
+}
+
+export interface DemoFixedCost {
+  id: string;
+  name: string;
+  value: number;
+  valueType: "F" | "P";
+  application: "Item" | "Nota";
+  channels: string[];
 }
 
 export interface DemoState {
-  version: 1;
+  version: 9;
   invoices: DemoInvoice[];
   products: DemoProduct[];
   people: DemoPerson[];
@@ -48,6 +91,16 @@ export interface DemoState {
     mercadoLivre: boolean;
     apchat: boolean;
   };
+  automation: {
+    scheduleHours: number[];
+    autoDelivery: boolean;
+    satisfactionEnabled: boolean;
+    satisfactionHour: number;
+    satisfactionDelayDays: number;
+  };
+  syncRuns: DemoSyncRun[];
+  ncmCredits: DemoNcmCredit[];
+  fixedCosts: DemoFixedCost[];
   updatedAt: string;
 }
 
@@ -58,11 +111,24 @@ export interface DemoMetrics {
   profitCents: number;
   marginBasisPoints: number;
   authorizedInvoices: number;
-  lowStockProducts: number;
+  synchronizedProducts: number;
+}
+
+export interface DemoDailyRevenue {
+  medianCents: number;
+  points: Array<{ date: string; revenueCents: number; invoices: number }>;
+}
+
+export interface DemoCustomerRanking {
+  name: string;
+  revenueCents: number;
+  profitCents: number;
+  averageTicketCents: number;
+  invoices: number;
 }
 
 const DEFAULT_STATE: DemoState = {
-  version: 1,
+  version: 9,
   invoices: [
     invoice(
       "nfe-10176",
@@ -226,29 +292,50 @@ const DEFAULT_STATE: DemoState = {
       "prod-1",
       "CABO-USBC-2M",
       "Cabo USB-C Reforçado 2m",
-      184,
-      40,
-      5_990,
+      "85444200",
+      2_890,
+      false,
     ),
-    product("prod-2", "HUB-USB-8P", "Hub USB-C 8 portas", 23, 25, 27_990),
+    product(
+      "prod-2",
+      "HUB-USB-8P",
+      "Hub USB-C 8 portas",
+      "84718000",
+      14_700,
+      false,
+    ),
     product(
       "prod-3",
       "SUP-NOTE-AL",
       "Suporte para notebook alumínio",
-      71,
-      20,
-      18_490,
+      "76169900",
+      9_420,
+      true,
     ),
-    product("prod-4", "MOUSE-VERT", "Mouse vertical sem fio", 12, 18, 14_990),
+    product(
+      "prod-4",
+      "MOUSE-VERT",
+      "Mouse vertical sem fio",
+      "84716053",
+      7_880,
+      false,
+    ),
     product(
       "prod-5",
       "TECL-MEC-84",
       "Teclado mecânico compacto",
-      46,
-      15,
-      32_990,
+      "84716052",
+      18_950,
+      false,
     ),
-    product("prod-6", "FONE-BT-PRO", "Headset Bluetooth Pro", 38, 12, 39_990),
+    product(
+      "prod-6",
+      "FONE-BT-PRO",
+      "Headset Bluetooth Pro",
+      "85183000",
+      21_400,
+      true,
+    ),
   ],
   people: [
     person(
@@ -266,6 +353,61 @@ const DEFAULT_STATE: DemoState = {
   ],
   goalCents: 4_500_000,
   integrations: { bling: true, mercadoLivre: true, apchat: false },
+  automation: {
+    scheduleHours: [0, 17],
+    autoDelivery: true,
+    satisfactionEnabled: true,
+    satisfactionHour: 10,
+    satisfactionDelayDays: 3,
+  },
+  syncRuns: [
+    {
+      id: "sync-initial-nfe",
+      kind: "nfe",
+      from: "2026-07-01",
+      to: "2026-08-08",
+      processed: 12,
+      createdAt: "2026-08-08T12:00:00.000Z",
+    },
+    {
+      id: "sync-initial-products",
+      kind: "products",
+      from: null,
+      to: null,
+      processed: 6,
+      createdAt: "2026-08-08T12:03:00.000Z",
+    },
+  ],
+  ncmCredits: [
+    { id: "ncm-84716052", ncm: "84716052", rate: 12, reduction: 0 },
+    { id: "ncm-85444200", ncm: "85444200", rate: 7, reduction: 0 },
+  ],
+  fixedCosts: [
+    {
+      id: "cost-marketplace",
+      name: "Comissão marketplace",
+      value: 16,
+      valueType: "P",
+      application: "Item",
+      channels: ["Mercado Livre"],
+    },
+    {
+      id: "cost-packaging",
+      name: "Embalagem operacional",
+      value: 3.5,
+      valueType: "F",
+      application: "Item",
+      channels: ["Bling", "Loja virtual"],
+    },
+    {
+      id: "cost-admin",
+      name: "Rateio administrativo",
+      value: 2.25,
+      valueType: "P",
+      application: "Nota",
+      channels: [],
+    },
+  ],
   updatedAt: "2026-08-08T12:00:00.000Z",
 };
 
@@ -313,9 +455,7 @@ export function calculateDemoMetrics(state: DemoState): DemoMetrics {
         : Math.round((profitCents * 10_000) / revenueCents),
     authorizedInvoices: included.filter((item) => item.status === "Autorizada")
       .length,
-    lowStockProducts: state.products.filter(
-      (item) => item.active && item.stock <= item.minimumStock,
-    ).length,
+    synchronizedProducts: state.products.length,
   };
 }
 
@@ -342,23 +482,124 @@ export function demoMonthlySeries(state: DemoState) {
   }));
 }
 
+export function demoDailyRevenue(state: DemoState): DemoDailyRevenue {
+  const byDate = new Map<string, { revenueCents: number; invoices: number }>();
+  for (const invoice of state.invoices) {
+    if (invoice.status === "Cancelada") continue;
+    const current = byDate.get(invoice.issuedAt) ?? {
+      revenueCents: 0,
+      invoices: 0,
+    };
+    current.revenueCents += invoice.valueCents;
+    current.invoices += 1;
+    byDate.set(invoice.issuedAt, current);
+  }
+  const points = [...byDate.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, values]) => ({ date, ...values }));
+  const orderedRevenue = points
+    .map((point) => point.revenueCents)
+    .sort((left, right) => left - right);
+  const middle = Math.floor(orderedRevenue.length / 2);
+  const medianCents = orderedRevenue.length
+    ? orderedRevenue.length % 2
+      ? (orderedRevenue[middle] ?? 0)
+      : Math.round(
+          ((orderedRevenue[middle - 1] ?? 0) + (orderedRevenue[middle] ?? 0)) /
+            2,
+        )
+    : 0;
+  return { medianCents, points };
+}
+
+export function demoCustomerRanking(state: DemoState): DemoCustomerRanking[] {
+  const byCustomer = new Map<
+    string,
+    { revenueCents: number; profitCents: number; invoices: number }
+  >();
+  for (const invoice of state.invoices) {
+    if (invoice.status === "Cancelada") continue;
+    const current = byCustomer.get(invoice.customer) ?? {
+      revenueCents: 0,
+      profitCents: 0,
+      invoices: 0,
+    };
+    current.revenueCents += invoice.valueCents;
+    current.profitCents +=
+      invoice.valueCents - invoice.costCents - invoice.taxCents;
+    current.invoices += 1;
+    byCustomer.set(invoice.customer, current);
+  }
+  return [...byCustomer.entries()]
+    .map(([name, values]) => ({
+      name,
+      ...values,
+      averageTicketCents: Math.round(values.revenueCents / values.invoices),
+    }))
+    .sort((left, right) => right.revenueCents - left.revenueCents)
+    .slice(0, 6);
+}
+
 function isDemoState(value: unknown): value is DemoState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<DemoState>;
   return (
-    candidate.version === 1 &&
+    candidate.version === 9 &&
     Array.isArray(candidate.invoices) &&
     candidate.invoices.every(isInvoice) &&
     Array.isArray(candidate.products) &&
     candidate.products.every(isProduct) &&
     Array.isArray(candidate.people) &&
     candidate.people.every(isPerson) &&
+    Array.isArray(candidate.syncRuns) &&
+    candidate.syncRuns.every(isSyncRun) &&
+    Array.isArray(candidate.ncmCredits) &&
+    candidate.ncmCredits.every(isNcmCredit) &&
+    Array.isArray(candidate.fixedCosts) &&
+    candidate.fixedCosts.every(isFixedCost) &&
     isSafeInteger(candidate.goalCents) &&
     typeof candidate.updatedAt === "string" &&
     !!candidate.integrations &&
     typeof candidate.integrations.bling === "boolean" &&
     typeof candidate.integrations.mercadoLivre === "boolean" &&
-    typeof candidate.integrations.apchat === "boolean"
+    typeof candidate.integrations.apchat === "boolean" &&
+    !!candidate.automation &&
+    Array.isArray(candidate.automation.scheduleHours) &&
+    candidate.automation.scheduleHours.every(
+      (hour) => Number.isInteger(hour) && hour >= 0 && hour <= 23,
+    ) &&
+    typeof candidate.automation.autoDelivery === "boolean" &&
+    typeof candidate.automation.satisfactionEnabled === "boolean" &&
+    Number.isInteger(candidate.automation.satisfactionHour) &&
+    Number.isInteger(candidate.automation.satisfactionDelayDays)
+  );
+}
+
+function isFixedCost(value: unknown): value is DemoFixedCost {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<DemoFixedCost>;
+  return (
+    typeof item.id === "string" &&
+    typeof item.name === "string" &&
+    typeof item.value === "number" &&
+    Number.isFinite(item.value) &&
+    (item.valueType === "F" || item.valueType === "P") &&
+    (item.application === "Item" || item.application === "Nota") &&
+    Array.isArray(item.channels) &&
+    item.channels.every((channel) => typeof channel === "string")
+  );
+}
+
+function isNcmCredit(value: unknown): value is DemoNcmCredit {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<DemoNcmCredit>;
+  return (
+    typeof item.id === "string" &&
+    typeof item.ncm === "string" &&
+    typeof item.rate === "number" &&
+    Number.isFinite(item.rate) &&
+    typeof item.reduction === "number" &&
+    Number.isFinite(item.reduction)
   );
 }
 
@@ -373,10 +614,14 @@ function isInvoice(value: unknown): value is DemoInvoice {
     typeof item.issuedAt === "string" &&
     isSafeInteger(item.valueCents) &&
     isSafeInteger(item.costCents) &&
+    isSafeInteger(item.baseCostCents) &&
     isSafeInteger(item.taxCents) &&
     isInvoiceStatus(item.status) &&
+    isDeliveryStatus(item.deliveryStatus) &&
     typeof item.hasBoleto === "boolean" &&
-    typeof item.hasTracking === "boolean"
+    typeof item.hasTracking === "boolean" &&
+    (item.unlinkedItemCode === null ||
+      typeof item.unlinkedItemCode === "string")
   );
 }
 
@@ -387,10 +632,35 @@ function isProduct(value: unknown): value is DemoProduct {
     typeof item.id === "string" &&
     typeof item.sku === "string" &&
     typeof item.name === "string" &&
-    isSafeInteger(item.stock) &&
-    isSafeInteger(item.minimumStock) &&
-    isSafeInteger(item.priceCents) &&
+    typeof item.ncm === "string" &&
+    isSafeInteger(item.costCents) &&
+    typeof item.ownManufacture === "boolean" &&
     typeof item.active === "boolean"
+  );
+}
+
+function isSyncRun(value: unknown): value is DemoSyncRun {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<DemoSyncRun>;
+  return (
+    typeof item.id === "string" &&
+    [
+      "nfe",
+      "nfe-details",
+      "nfe-delivery",
+      "nfe-normalization",
+      "payment-methods",
+      "sales-channels",
+      "sellers",
+      "operation-natures",
+      "products",
+      "scheduled-cycle",
+      "satisfaction",
+    ].includes(String(item.kind)) &&
+    (item.from === null || typeof item.from === "string") &&
+    (item.to === null || typeof item.to === "string") &&
+    isSafeInteger(item.processed) &&
+    typeof item.createdAt === "string"
   );
 }
 
@@ -404,12 +674,18 @@ function isPerson(value: unknown): value is DemoPerson {
     typeof item.state === "string" &&
     isSafeInteger(item.orders) &&
     isSafeInteger(item.totalCents) &&
-    typeof item.active === "boolean"
+    typeof item.messagingDisabled === "boolean"
   );
 }
 
 function isInvoiceStatus(value: unknown): value is DemoInvoiceStatus {
   return ["Autorizada", "Pendente", "Em processamento", "Cancelada"].includes(
+    String(value),
+  );
+}
+
+function isDeliveryStatus(value: unknown): value is DemoDeliveryStatus {
+  return ["Erro", "Pronto para envio", "Enviado", "Mercado livre"].includes(
     String(value),
   );
 }
@@ -443,22 +719,38 @@ function invoice(
     issuedAt,
     valueCents,
     costCents,
+    baseCostCents: costCents,
     taxCents,
     status,
+    deliveryStatus: deliveryStatus(number, channel, status),
     hasBoleto,
     hasTracking,
+    unlinkedItemCode: number === "000010173" ? "SKU-LEGADO-SEM-VINCULO" : null,
   };
+}
+
+function deliveryStatus(
+  number: string,
+  channel: string,
+  status: DemoInvoiceStatus,
+): DemoDeliveryStatus {
+  if (channel === "Mercado Livre") return "Mercado livre";
+  if (status === "Cancelada") return "Erro";
+  const finalDigit = Number(number.slice(-1));
+  if (finalDigit % 3 === 0) return "Pronto para envio";
+  if (finalDigit % 4 === 0) return "Erro";
+  return "Enviado";
 }
 
 function product(
   id: string,
   sku: string,
   name: string,
-  stock: number,
-  minimumStock: number,
-  priceCents: number,
+  ncm: string,
+  costCents: number,
+  ownManufacture: boolean,
 ): DemoProduct {
-  return { id, sku, name, stock, minimumStock, priceCents, active: true };
+  return { id, sku, name, ncm, costCents, ownManufacture, active: true };
 }
 
 function person(
@@ -469,5 +761,13 @@ function person(
   orders: number,
   totalCents: number,
 ): DemoPerson {
-  return { id, name, city, state, orders, totalCents, active: true };
+  return {
+    id,
+    name,
+    city,
+    state,
+    orders,
+    totalCents,
+    messagingDisabled: false,
+  };
 }

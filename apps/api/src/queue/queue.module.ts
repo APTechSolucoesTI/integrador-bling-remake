@@ -6,9 +6,15 @@ import {
   type OnModuleDestroy,
 } from "@nestjs/common";
 import { Queue } from "bullmq";
+import {
+  INTEGRATION_QUEUE,
+  INTEGRATION_QUEUE_CLIENT,
+} from "./queue.constants.js";
 
-export const INTEGRATION_QUEUE = "integration-jobs";
-export const INTEGRATION_QUEUE_CLIENT = Symbol("INTEGRATION_QUEUE_CLIENT");
+export {
+  INTEGRATION_QUEUE,
+  INTEGRATION_QUEUE_CLIENT,
+} from "./queue.constants.js";
 
 @Injectable()
 class QueueLifecycle implements OnModuleDestroy {

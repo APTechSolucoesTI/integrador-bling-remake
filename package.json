@@ -9,6 +9,13 @@
   "scripts": {
     "build": "corepack pnpm -r --workspace-concurrency=1 --if-present build",
     "bootstrap:admin": "corepack pnpm --filter @integrador/api bootstrap:admin",
+    "db:migrate:dev": "corepack pnpm --filter @integrador/db prisma:migrate:dev",
+    "db:migrate:deploy": "corepack pnpm --filter @integrador/db prisma:migrate:deploy",
+    "db:seed": "corepack pnpm --filter @integrador/db prisma:seed",
+    "db:migrate-legacy": "corepack pnpm --filter @integrador/db migrate:legacy",
+    "db:bootstrap:clean": "node scripts/clean-bootstrap.mjs",
+    "bling:import-token": "corepack pnpm --filter @integrador/db bling:import-token",
+    "bling:smoke": "corepack pnpm --filter @integrador/worker bling:smoke",
     "dev": "corepack pnpm --parallel --filter './apps/*' dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -17,8 +24,9 @@
     "typecheck": "corepack pnpm -r --workspace-concurrency=1 --if-present typecheck"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
     "@eslint/js": "^9.0.0",
+    "@types/node": "^24.0.0",
+    "embedded-postgres": "18.4.0-beta.17",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
     "typescript": "6.0.3",

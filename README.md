@@ -1,29 +1,28 @@
-# Integrador Bling — Modernização SaaS
+# Integrador Bling — plataforma moderna
 
-Migração incremental do legado PHP/Adianti para TypeScript, Node.js e Next.js. O sistema original permanece preservado em `legacy/` como especificação funcional.
+Monorepo TypeScript que substitui gradualmente o sistema PHP/Adianti preservado em `legacy/` apenas como referência funcional e origem de uma futura importação.
 
-## Estado atual
+## Arquitetura atual
 
-- Monorepo pnpm com web, API e worker.
-- Control plane multi-tenant Prisma/PostgreSQL, sem mudanças destrutivas no legado.
-- Demo pública sem login/backend, com mocks manipuláveis persistidos em `localStorage`.
-- Gateways produtivos isolados para Bling, APChat e Mercado Livre, com OAuth moderno e execução externa via API/worker.
-- Sincronização BullMQ de NF-e, detalhes documentais, produtos e pedidos de venda para o PostgreSQL legado, sempre limitada à unidade ativa.
-- Núcleo decimal de caracterização para lucro/margem.
-- BullMQ com retry finito, backoff e idempotência por tenant.
-- Landing APBling, dashboard SaaS responsivo e áreas reais de NF-e, catálogos, documentos, financeiro, metas, operações e administração.
+- `apps/web`: Next.js 16, produto autenticado e demo pública em `/demo`.
+- `apps/api`: NestJS 11, sessão opaca, RBAC, OpenAPI e operações tenant-aware.
+- `apps/worker`: BullMQ, sincronizações Bling/APChat/Mercado Livre e rotinas agendadas.
+- `packages/db`: banco PostgreSQL próprio, inteiramente definido por Prisma e migrations.
+- `packages/contracts`, `domain` e `integrations`: contratos, regras e gateways compartilhados.
 
-Consulte [MIGRATION_STATUS.md](MIGRATION_STATUS.md) para o progresso e os bloqueios reais. A matriz de paridade está em [docs/feature-matrix.md](docs/feature-matrix.md).
+O banco antigo não é dependência operacional. `DATABASE_URL` sempre aponta para um PostgreSQL novo do produto; `LEGACY_DATABASE_URL` é opcional, somente leitura e usada exclusivamente pelo importador de cutover. Veja [arquitetura do banco](docs/database-architecture.md) e [mapa de migração](docs/legacy-to-modern-database-map.md).
 
 ## Início rápido
 
 ```powershell
 corepack pnpm install
 Copy-Item .env.example .env
+corepack pnpm db:migrate:deploy
+corepack pnpm db:seed
 corepack pnpm dev
 ```
 
-Depois da migration/build, o primeiro acesso real é provisionado de forma idempotente:
+Para provisionar o primeiro proprietário:
 
 ```powershell
 $env:APBLING_ADMIN_EMAIL="admin@empresa.com.br"
@@ -31,20 +30,45 @@ $env:APBLING_ADMIN_PASSWORD="defina-uma-senha-forte"
 $env:APBLING_ADMIN_NAME="Administrador"
 $env:APBLING_TENANT_NAME="Minha Empresa"
 $env:APBLING_TENANT_SLUG="minha-empresa"
-$env:APBLING_LEGACY_UNIT_ID="1"
-$env:APBLING_LEGACY_USER_ID="-1"
 corepack pnpm bootstrap:admin
 ```
 
-O banco apontado por `DATABASE_URL` deve conter o schema legado, além das migrations aditivas `saas_*`.
+`APBLING_LEGACY_UNIT_ID` e `APBLING_LEGACY_USER_ID` são metadados opcionais de rastreabilidade, nunca chaves operacionais.
 
-Para os callbacks OAuth, configure `WEB_APP_URL`, `BLING_REDIRECT_URI` e `MERCADO_LIVRE_REDIRECT_URI` com URLs cadastradas nos respectivos aplicativos. Tokens e credenciais continuam vinculados à unidade no PostgreSQL e nunca pertencem à demonstração pública.
+## Primeiro teste real do Bling
 
-Ou, com Docker disponível:
+O fluxo preferencial é OAuth pelo painel em **Operações → Autorizar Bling**: ele usa o callback configurado em `BLING_REDIRECT_URI` e cria uma credencial própria. Para validar a transição com um refresh token já existente, use o bootstrap administrativo local — ele não aceita token como argumento nem o registra:
 
 ```powershell
-docker compose up --build
+corepack pnpm bling:import-token -- --tenant <UUID_DO_TENANT>
 ```
+
+O comando pede o refresh token sem eco, usa `BLING_CLIENT_ID` e `BLING_CLIENT_SECRET` para renová-lo com `enable-jwt: 1`, cifra os tokens retornados com AES-256-GCM e faz um GET mínimo de NF-e. Em seguida, persista no máximo cinco NF-e recentes:
+
+```powershell
+corepack pnpm bling:smoke -- --tenant <UUID_DO_TENANT> --limit 1 --from 2026-08-04 --to 2026-08-11
+```
+
+O smoke nunca dispara sincronização histórica, mensagens ou automações. Ele exige `TOKEN_ENCRYPTION_KEY_BASE64`, `DATABASE_URL`, `BLING_CLIENT_ID` e `BLING_CLIENT_SECRET` já configurados no ambiente. O refresh token precisa pertencer exatamente ao mesmo aplicativo Bling dessas credenciais.
+
+## Banco e importação
+
+Use apenas migrations versionadas:
+
+```powershell
+corepack pnpm db:migrate:dev
+corepack pnpm db:migrate:deploy
+corepack pnpm db:seed
+```
+
+Não use `prisma db pull` ou `prisma db push` como fonte do schema. Para auditar uma origem legada sem escrever nela:
+
+```powershell
+$env:LEGACY_DATABASE_URL="postgresql://usuario_readonly:senha@host/banco_antigo"
+corepack pnpm db:migrate-legacy
+```
+
+O modo `--execute` está restrito ao primeiro estágio idempotente (empresas); os demais transformadores permanecem deliberadamente bloqueados até o cutover aprovado.
 
 ## Validação
 
@@ -54,6 +78,7 @@ corepack pnpm lint
 corepack pnpm typecheck
 corepack pnpm test
 corepack pnpm build
+corepack pnpm db:bootstrap:clean
 ```
 
-Nenhuma integração real é executada quando o tenant ou o processo está em modo demonstração. Não faça `db push` contra o banco legado; siga [docs/deployment.md](docs/deployment.md).
+`db:bootstrap:clean` sobe um PostgreSQL efêmero vazio, aplica migrations, gera o client, executa seed, compila e faz smoke de API, worker e web. Nenhuma integração externa é executada em modo demonstração.

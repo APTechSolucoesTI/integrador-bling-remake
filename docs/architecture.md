@@ -1,25 +1,21 @@
 # Arquitetura moderna
 
-## Estrutura
+## Componentes
 
-- `apps/web`: Next.js 16/App Router, experiência administrativa responsiva.
-- `apps/api`: NestJS 11, OpenAPI em `/docs` e módulos HTTP.
-- `apps/worker`: BullMQ, políticas de retry e chaves idempotentes por tenant.
-- `packages/contracts`: contratos Zod compartilhados.
-- `packages/domain`: regras puras, incluindo a caracterização decimal do lucro legado.
-- `packages/integrations`: gateways Bling, APChat e Mercado Livre, reais/fake.
-- `packages/db`: control plane SaaS em Prisma 7, separado das tabelas legadas.
+- `apps/web`: Next.js 16/App Router.
+- `apps/api`: NestJS 11 e OpenAPI em `/docs`.
+- `apps/worker`: BullMQ, retries e idempotência por tenant.
+- `packages/contracts`: contratos Zod.
+- `packages/domain`: regras financeiras decimais.
+- `packages/integrations`: gateways Bling, APChat e Mercado Livre.
+- `packages/db`: Prisma 7 e schema integral do PostgreSQL do produto.
 
-## Limites de segurança
+## Fronteiras
 
-O login valida hash scrypt, cria um token opaco e grava somente seu SHA-256 em `saas_auth_session`. O navegador recebe o token em cookie HttpOnly/SameSite. O tenant ativo é resolvido dessa sessão e qualquer troca exige uma membership ativa. O teste `tenant-access.test.ts` comprova a rejeição cruzada básica.
+Web e API nunca recebem uma unidade operacional da requisição. O tenant UUID vem da sessão, e toda consulta persistente o aplica no servidor. Tokens externos são cifrados com AES-256-GCM usando `TOKEN_ENCRYPTION_KEY_BASE64`.
 
-Os gateways reais chamam `assertRealOutboundAllowed` antes de qualquer efeito. A saída é bloqueada quando o contexto do tenant é demo ou quando `DEMO_MODE=true` globalmente.
+O PostgreSQL legado não participa do runtime. Ele é uma fonte externa opcional e somente leitura do comando de importação. Tabelas do framework Adianti (`system_*`) e a antiga `view_nfe` não são dependências do produto.
 
-A rota pública `/demo` é uma fronteira separada: não usa sessão, API, banco ou gateways. Os mocks ficam no bundle do frontend, mudanças são validadas e persistidas em `localStorage`, e o visitante pode restaurar o estado inicial. O produto real continua autenticado e tenant-aware.
+O login grava somente o SHA-256 do token opaco em `saas_auth_session`; o navegador recebe cookie HttpOnly/SameSite. Trocas de empresa exigem membership ativa. A rota `/demo` permanece separada, sem API, banco ou efeitos externos.
 
-## Compatibilidade do banco
-
-O schema Prisma atual contém apenas tabelas novas prefixadas por `saas_`. Ele não representa autorização para alterar o schema legado. `legacy/app/database/integrador_aptech-pgsql.sql` continua sendo o baseline estático, e uma instância real deverá passar por `prisma db pull`/introspecção controlada antes de models legados serem adicionados.
-
-Nenhum `db push` automático é executado no Compose. Ele usa `prisma migrate deploy`, que aplica a migration aditiva versionada antes da API. Antes de usar a migration em um banco legado existente, ainda é obrigatório validar nomes, enums e histórico de migrations contra um clone sanitizado.
+Detalhes do ciclo do banco estão em [database-architecture.md](database-architecture.md).

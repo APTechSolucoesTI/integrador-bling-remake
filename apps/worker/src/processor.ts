@@ -27,13 +27,72 @@ interface ProcessorDependencies {
   production?: {
     syncNfe(
       context: { tenantId: string; correlationId: string; demo: false },
-      input: Pick<ListNfeInput, "issuedFrom" | "issuedTo">,
+      input: Pick<ListNfeInput, "issuedFrom" | "issuedTo"> & {
+        autoDeliver?: boolean;
+      },
     ): Promise<Record<string, unknown>>;
     syncNfeDetails(
       context: { tenantId: string; correlationId: string; demo: false },
       nfeId: number,
     ): Promise<Record<string, unknown>>;
+    processNfeXml(
+      context: { tenantId: string; correlationId: string; demo: false },
+      nfeId: number,
+    ): Promise<Record<string, unknown>>;
+    syncCancelledNfe(
+      context: { tenantId: string; correlationId: string; demo: false },
+      input: Pick<ListNfeInput, "issuedFrom" | "issuedTo">,
+    ): Promise<Record<string, unknown>>;
+    deliverNfe(
+      context: { tenantId: string; correlationId: string; demo: false },
+      nfeId: number,
+    ): Promise<Record<string, unknown>>;
+    updateContact(
+      context: { tenantId: string; correlationId: string; demo: false },
+      input: {
+        nfeId: number;
+        contactId: number;
+        contactBlingId: string;
+        mobilePhone: string;
+        messagingDisabled: boolean;
+      },
+    ): Promise<Record<string, unknown>>;
+    deliverSatisfactionSurveys(context: {
+      tenantId: string;
+      correlationId: string;
+      demo: false;
+    }): Promise<Record<string, unknown>>;
+    processExpiredGoals(context: {
+      tenantId: string;
+      correlationId: string;
+      demo: false;
+    }): Promise<Record<string, unknown>>;
     syncProducts(context: {
+      tenantId: string;
+      correlationId: string;
+      demo: false;
+    }): Promise<Record<string, unknown>>;
+    syncPaymentMethods(context: {
+      tenantId: string;
+      correlationId: string;
+      demo: false;
+    }): Promise<Record<string, unknown>>;
+    syncSalesChannels(context: {
+      tenantId: string;
+      correlationId: string;
+      demo: false;
+    }): Promise<Record<string, unknown>>;
+    syncSellers(context: {
+      tenantId: string;
+      correlationId: string;
+      demo: false;
+    }): Promise<Record<string, unknown>>;
+    syncOperationNatures(context: {
+      tenantId: string;
+      correlationId: string;
+      demo: false;
+    }): Promise<Record<string, unknown>>;
+    refreshBlingToken(context: {
       tenantId: string;
       correlationId: string;
       demo: false;
@@ -71,14 +130,54 @@ export function createIntegrationProcessor(
           return dependencies.production.syncNfe(context, {
             issuedFrom: stringPayload(job.payload, "from"),
             issuedTo: stringPayload(job.payload, "to"),
+            ...(job.payload["autoDeliver"] === true
+              ? { autoDeliver: true }
+              : {}),
           });
         case "nfe.sync-details":
           return dependencies.production.syncNfeDetails(
             context,
             numberPayload(job.payload, "nfeId"),
           );
+        case "nfe.process-xml":
+          return dependencies.production.processNfeXml(
+            context,
+            numberPayload(job.payload, "nfeId"),
+          );
+        case "bling.sync-cancelled-nfe":
+          return dependencies.production.syncCancelledNfe(context, {
+            issuedFrom: stringPayload(job.payload, "from"),
+            issuedTo: stringPayload(job.payload, "to"),
+          });
+        case "nfe.deliver":
+          return dependencies.production.deliverNfe(
+            context,
+            numberPayload(job.payload, "nfeId"),
+          );
+        case "contact.update":
+          return dependencies.production.updateContact(context, {
+            nfeId: numberPayload(job.payload, "nfeId"),
+            contactId: numberPayload(job.payload, "contactId"),
+            contactBlingId: stringPayload(job.payload, "contactBlingId"),
+            mobilePhone: optionalStringPayload(job.payload, "mobilePhone"),
+            messagingDisabled: booleanPayload(job.payload, "messagingDisabled"),
+          });
+        case "satisfaction.deliver":
+          return dependencies.production.deliverSatisfactionSurveys(context);
+        case "goals.process-expired":
+          return dependencies.production.processExpiredGoals(context);
         case "bling.sync-products":
           return dependencies.production.syncProducts(context);
+        case "bling.sync-payment-methods":
+          return dependencies.production.syncPaymentMethods(context);
+        case "bling.sync-sales-channels":
+          return dependencies.production.syncSalesChannels(context);
+        case "bling.sync-sellers":
+          return dependencies.production.syncSellers(context);
+        case "bling.sync-operation-natures":
+          return dependencies.production.syncOperationNatures(context);
+        case "bling.refresh-token":
+          return dependencies.production.refreshBlingToken(context);
         case "bling.sync-sales-orders":
           return dependencies.production.syncSalesOrders(context, {
             from: stringPayload(job.payload, "from"),
@@ -130,6 +229,8 @@ export function createIntegrationProcessor(
           externalIds: [...authorized, ...issued].map((nfe) => nfe.id),
         };
       }
+      case "bling.sync-cancelled-nfe":
+        return { mode: "demo", updated: 0 };
       case "apchat.deliver": {
         const delivery = await dependencies.apchat.deliver(context, {
           recipient: stringPayload(job.payload, "recipient"),
@@ -138,9 +239,51 @@ export function createIntegrationProcessor(
         });
         return { mode: "demo", ...delivery };
       }
+      case "nfe.deliver":
+        return {
+          mode: "demo",
+          nfeId: numberPayload(job.payload, "nfeId"),
+          accepted: true,
+        };
+      case "nfe.sync-details":
+        return {
+          mode: "demo",
+          nfeId: numberPayload(job.payload, "nfeId"),
+          synchronized: true,
+        };
+      case "nfe.process-xml":
+        return {
+          mode: "demo",
+          nfeId: numberPayload(job.payload, "nfeId"),
+          calculated: true,
+        };
+      case "contact.update":
+        return { mode: "demo", updated: false };
+      case "satisfaction.deliver":
+        return { mode: "demo", delivered: 0 };
+      case "goals.process-expired":
+        return { mode: "demo", processed: 0 };
       case "bling.sync-products":
       case "bling.sync-sales-orders":
         return { mode: "demo", fetched: 0 };
+      case "bling.sync-payment-methods": {
+        const items = await dependencies.bling.listPaymentMethods(context);
+        return { mode: "demo", fetched: items.length };
+      }
+      case "bling.sync-sales-channels": {
+        const items = await dependencies.bling.listSalesChannels(context);
+        return { mode: "demo", fetched: items.length };
+      }
+      case "bling.sync-sellers": {
+        const items = await dependencies.bling.listSellers(context);
+        return { mode: "demo", fetched: items.length };
+      }
+      case "bling.sync-operation-natures": {
+        const items = await dependencies.bling.listOperationNatures(context);
+        return { mode: "demo", fetched: items.length };
+      }
+      case "bling.refresh-token":
+        return { mode: "demo", refreshed: false };
       default:
         throw new WorkerHandlerNotConfiguredError(job.jobType);
     }
@@ -160,5 +303,23 @@ function numberPayload(payload: Record<string, unknown>, key: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
     throw new Error(`Payload inválido: ${key}`);
   }
+  return value;
+}
+
+function optionalStringPayload(
+  payload: Record<string, unknown>,
+  key: string,
+): string {
+  const value = payload[key];
+  if (typeof value !== "string") throw new Error(`Payload invÃ¡lido: ${key}`);
+  return value;
+}
+
+function booleanPayload(
+  payload: Record<string, unknown>,
+  key: string,
+): boolean {
+  const value = payload[key];
+  if (typeof value !== "boolean") throw new Error(`Payload invÃ¡lido: ${key}`);
   return value;
 }

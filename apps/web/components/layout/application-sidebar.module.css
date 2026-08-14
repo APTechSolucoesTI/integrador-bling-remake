@@ -1,0 +1,195 @@
+.sidebar {
+  width: 242px;
+  height: var(--app-viewport-height, 100dvh);
+  position: fixed;
+  inset: 0 auto 0 0;
+  padding: 20px 15px 16px;
+  background: #12221d;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  z-index: 25;
+  box-shadow: 12px 0 34px rgba(11, 34, 26, 0.08);
+  transition: width 0.22s ease, padding 0.22s ease, transform 0.25s ease;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+  padding: 0 7px 18px;
+}
+
+.brand > span {
+  width: 35px;
+  height: 35px;
+  border: 1px solid #6be4bf69;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #72e1bf;
+}
+
+.brand div,
+.tenantSwitch div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand strong {
+  font-size: 19px;
+  letter-spacing: -0.6px;
+}
+
+.brand small {
+  font-size: 7px;
+  letter-spacing: 1.6px;
+  color: #86978f;
+}
+
+.tenantSwitch {
+  width: 100%;
+  min-height: 56px;
+  padding: 9px 10px;
+  border: 1px solid #31443d;
+  border-radius: 12px;
+  color: #f8fffb;
+  background: #1a2d26;
+  display: grid;
+  grid-template-columns: 31px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.tenantSwitch > span {
+  width: 31px;
+  height: 31px;
+  border-radius: 9px;
+  background: #273c34;
+  color: #75e59e;
+  display: grid;
+  place-items: center;
+}
+
+.tenantSwitch small {
+  color: #81928b;
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.tenantSwitch select {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: #f8fffb;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  appearance: none;
+  cursor: pointer;
+}
+
+.tenantSwitch option { color: #17211d; background: #fff; }
+.tenantError { margin: 7px 4px 0; color: #ffaaa3; font-size: 9px; }
+
+.nav {
+  flex: 1;
+  padding-top: 16px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #7f918a transparent;
+}
+
+.nav::-webkit-scrollbar { width: 6px; }
+.nav::-webkit-scrollbar-track { background: transparent; }
+.nav::-webkit-scrollbar-thumb { border-radius: 999px; background: #51665d; }
+
+.navGroup { display: flex; flex-direction: column; gap: 4px; }
+.navGroup p {
+  margin: 12px 10px 5px;
+  color: #687b72;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 1.4px;
+}
+
+.navGroup a {
+  min-height: 39px;
+  padding: 0 10px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #aebbb6;
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.navGroup a:hover { color: #fff; background: #1b3028; }
+.navGroup .active {
+  color: #c8ffda;
+  background: linear-gradient(90deg, #1d3c2e, #1b332a);
+  box-shadow: inset 3px 0 #70ec9d;
+}
+
+.sidebarFooter {
+  padding-top: 13px;
+  border-top: 1px solid #2a3a34;
+  display: grid;
+  gap: 3px;
+}
+
+.sidebarFooter button {
+  width: 100%;
+  min-height: 35px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #84968e;
+  background: transparent;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sidebarFooter button:hover { color: #fff; background: #1b3028; }
+.sidebarFooter .collapseButton { color: #b7c8c0; }
+
+.collapsed { width: 76px; padding-inline: 10px; }
+.collapsed .brand { justify-content: center; padding-inline: 0; }
+.collapsed .brand div,
+.collapsed .tenantSwitch div,
+.collapsed .tenantSwitch > svg,
+.collapsed .navGroup p,
+.collapsed .navGroup a span,
+.collapsed .sidebarFooter span { display: none; }
+.collapsed .tenantSwitch {
+  grid-template-columns: 1fr;
+  padding: 9px;
+  cursor: default;
+}
+.collapsed .tenantSwitch > span { margin: auto; }
+.collapsed .navGroup a,
+.collapsed .sidebarFooter button { justify-content: center; padding-inline: 0; }
+.collapsed .navGroup { gap: 6px; }
+
+@media (max-width: 820px) {
+  .sidebar { width: 242px; transform: translateX(-105%); }
+  .sidebarOpen { transform: translateX(0); }
+  .collapseButton { display: none !important; }
+  .collapsed { width: 242px; padding: 20px 15px 16px; }
+  .collapsed .brand div,
+  .collapsed .tenantSwitch div,
+  .collapsed .tenantSwitch > svg,
+  .collapsed .navGroup p,
+  .collapsed .navGroup a span,
+  .collapsed .sidebarFooter span { display: flex; }
+}

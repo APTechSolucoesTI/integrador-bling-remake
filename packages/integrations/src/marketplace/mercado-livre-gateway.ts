@@ -29,11 +29,14 @@ export class MercadoLivreFakeGateway implements MercadoLivreGateway {
 
 export class MercadoLivreRealGateway implements MercadoLivreGateway {
   readonly #options: MercadoLivreRealGatewayOptions | null;
+  readonly #globalDemoMode: boolean;
   readonly #fetch: typeof fetch;
   readonly #timeoutMs: number;
 
   constructor(options: MercadoLivreRealGatewayOptions | boolean) {
     this.#options = typeof options === "boolean" ? null : options;
+    this.#globalDemoMode =
+      typeof options === "boolean" ? options : options.globalDemoMode;
     this.#fetch =
       typeof options === "boolean" ? fetch : (options.fetch ?? fetch);
     this.#timeoutMs =
@@ -44,11 +47,7 @@ export class MercadoLivreRealGateway implements MercadoLivreGateway {
     context: GatewayContext,
     orderId: string,
   ): Promise<string> {
-    assertRealOutboundAllowed(
-      "Mercado Livre",
-      context,
-      this.#options?.globalDemoMode ?? false,
-    );
+    assertRealOutboundAllowed("Mercado Livre", context, this.#globalDemoMode);
     if (!this.#options) throw new Error("MercadoLivreRealGatewayNotConfigured");
     if (!/^\d+$/.test(orderId)) throw new Error("MercadoLivreInvalidOrderId");
     const order = await this.#order(context, orderId, true);

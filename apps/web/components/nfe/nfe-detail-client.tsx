@@ -3,16 +3,18 @@
 import type {
   NfeDetailResponse,
   NfeSyncResponse,
+  ProductListResponse,
   SessionResponse,
 } from "@integrador/contracts";
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
   Banknote,
-  Bell,
   Boxes,
   Building2,
   Calendar,
+  Calculator,
   CheckCircle2,
   ChevronDown,
   CircleDollarSign,
@@ -22,29 +24,39 @@ import {
   FileText,
   Gauge,
   Goal,
-  HelpCircle,
   Info,
   LoaderCircle,
+  Link2,
   LogOut,
   Menu,
+  Orbit,
   PackageSearch,
   ReceiptText,
   RefreshCw,
+  Search,
   Settings,
   ShieldCheck,
+  Tags,
   Truck,
   Users,
-  Workflow,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
+import { ApplicationSidebar } from "../layout/application-sidebar";
+import { ApplicationHeaderActions } from "../layout/application-header-actions";
+import { ApplicationGlobalSearch } from "../layout/application-global-search";
 import styles from "./nfe-detail.module.css";
 import shell from "./nfe.module.css";
 
-export function NfeDetailClient() {
+export function NfeDetailClient({
+  financial = false,
+}: {
+  financial?: boolean;
+}) {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [session, setSession] = useState<SessionResponse | null>(null);
@@ -54,6 +66,17 @@ export function NfeDetailClient() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [normalizingItem, setNormalizingItem] = useState<
+    NfeDetailResponse["items"][number] | null
+  >(null);
+  const [productSearch, setProductSearch] = useState("");
+  const [products, setProducts] = useState<ProductListResponse["items"]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(
+    null,
+  );
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [normalizing, setNormalizing] = useState(false);
+  const [productError, setProductError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,7 +84,10 @@ export function NfeDetailClient() {
     try {
       const [sessionResponse, invoiceResponse] = await Promise.all([
         fetch(`${API_URL}/v1/auth/session`, { credentials: "include" }),
-        fetch(`${API_URL}/v1/nfe/${params.id}`, { credentials: "include" }),
+        fetch(
+          `${API_URL}/v1/nfe/${params.id}${financial ? "/financial" : ""}`,
+          { credentials: "include" },
+        ),
       ]);
       if (sessionResponse.status === 401 || invoiceResponse.status === 401) {
         router.replace("/login");
@@ -80,11 +106,45 @@ export function NfeDetailClient() {
     } finally {
       setLoading(false);
     }
-  }, [params.id, router]);
+  }, [financial, params.id, router]);
 
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    if (!normalizingItem) return;
+    const controller = new AbortController();
+    const searchProducts = async () => {
+      setLoadingProducts(true);
+      setProductError(null);
+      try {
+        const query = new URLSearchParams({ page: "1", pageSize: "30" });
+        if (productSearch.trim()) query.set("search", productSearch.trim());
+        const response = await fetch(`${API_URL}/v1/products?${query}`, {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(await responseMessage(response));
+        const result = (await response.json()) as ProductListResponse;
+        setProducts(result.items);
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setProductError(
+          cause instanceof Error
+            ? cause.message
+            : "Não foi possível buscar os produtos.",
+        );
+      } finally {
+        if (!controller.signal.aborted) setLoadingProducts(false);
+      }
+    };
+    const timer = window.setTimeout(() => void searchProducts(), 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [normalizingItem, productSearch]);
   async function syncDetails() {
     setSyncing(true);
     setError(null);
@@ -116,6 +176,44 @@ export function NfeDetailClient() {
     }).catch(() => undefined);
     router.replace("/login");
   }
+  function openNormalization(item: NfeDetailResponse["items"][number]) {
+    setNormalizingItem(item);
+    setProductSearch(item.codigo ?? "");
+    setSelectedProductId(null);
+    setProducts([]);
+    setProductError(null);
+  }
+  async function normalizeItem() {
+    if (!normalizingItem || selectedProductId === null) return;
+    setNormalizing(true);
+    setProductError(null);
+    try {
+      const response = await fetch(
+        `${API_URL}/v1/nfe/${params.id}/items/${normalizingItem.id}/normalize`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ productId: selectedProductId }),
+        },
+      );
+      if (!response.ok) throw new Error(await responseMessage(response));
+      const queued = (await response.json()) as NfeSyncResponse;
+      setNormalizingItem(null);
+      setSuccess(
+        `Produto vinculado. Recálculo enviado para a fila (${queued.id.slice(0, 8)}).`,
+      );
+      await load();
+    } catch (cause) {
+      setProductError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível vincular o produto.",
+      );
+    } finally {
+      setNormalizing(false);
+    }
+  }
   if (!session && loading)
     return (
       <main className={shell.statePage}>
@@ -130,7 +228,9 @@ export function NfeDetailClient() {
         <FileText size={28} />
         <h1>NF-e indisponível</h1>
         <p>{error}</p>
-        <Link href="/app/nfe">Voltar às notas</Link>
+        <Link href={financial ? "/app/finance" : "/app/nfe"}>
+          Voltar à listagem
+        </Link>
       </main>
     );
   const invoice = data.invoice;
@@ -139,19 +239,26 @@ export function NfeDetailClient() {
 
   return (
     <main className={shell.shell}>
+      <ApplicationSidebar session={session} open={menuOpen} onLogout={logout} />
       <aside
+        hidden
+        style={{ display: "none" }}
         className={`${shell.sidebar} ${menuOpen ? shell.sidebarOpen : ""}`}
       >
         <Link className={shell.brand} href="/">
           <span>
-            <Workflow size={18} />
+            <Orbit size={18} />
           </span>
           <div>
             <strong>APBling</strong>
             <small>BLING OPERATIONS</small>
           </div>
         </Link>
-        <button className={shell.tenant} type="button" disabled>
+        <Link
+          className={shell.tenant}
+          href="/app/dashboard#organization"
+          title="Trocar organização"
+        >
           <span>
             <Building2 size={16} />
           </span>
@@ -160,7 +267,7 @@ export function NfeDetailClient() {
             <strong>{session.tenant.name}</strong>
           </div>
           <ChevronDown size={14} />
-        </button>
+        </Link>
         <nav className={shell.nav}>
           <p>OPERAÇÃO</p>
           <Link href="/app/dashboard">
@@ -194,7 +301,7 @@ export function NfeDetailClient() {
             <Activity size={17} /> Jobs e integrações
           </Link>
           <p>ADMINISTRAÇÃO</p>
-          {session.role === "owner" || session.role === "admin" ? (
+          {session.permissions.includes("users:manage") ? (
             <Link href="/app/users">
               <ShieldCheck size={17} /> Usuários e acesso
             </Link>
@@ -204,9 +311,6 @@ export function NfeDetailClient() {
           </Link>
         </nav>
         <div className={shell.sidebarFooter}>
-          <span>
-            <HelpCircle size={16} /> Central de ajuda
-          </span>
           <button type="button" onClick={() => void logout()}>
             <LogOut size={16} /> Sair
           </button>
@@ -221,21 +325,14 @@ export function NfeDetailClient() {
           >
             <Menu size={20} />
           </button>
-          <div className={styles.breadcrumb}>
-            <Link href="/app/nfe">Notas fiscais</Link>
-            <span>/</span>
-            <strong>NF-e {invoice.numero}</strong>
-          </div>
-          <span className={shell.dbBadge}>
-            <CheckCircle2 size={13} /> PostgreSQL legado
-          </span>
-          <button className={shell.iconButton} type="button">
-            <Bell size={17} />
-          </button>
-          <div className={shell.avatar}>{initials(session.user.name)}</div>
+          <ApplicationGlobalSearch />
+          <ApplicationHeaderActions session={session} onLogout={logout} />
         </header>
         <div className={shell.content}>
-          <Link className={styles.back} href="/app/nfe">
+          <Link
+            className={styles.back}
+            href={financial ? "/app/finance" : "/app/nfe"}
+          >
             <ArrowLeft size={14} /> Voltar à listagem
           </Link>
           <section className={styles.hero}>
@@ -251,7 +348,9 @@ export function NfeDetailClient() {
             <div className={styles.heroActions}>
               <button
                 type="button"
-                disabled={syncing || session.role === "viewer"}
+                disabled={
+                  syncing || !session.permissions.includes("nfe:manage")
+                }
                 onClick={() => void syncDetails()}
               >
                 <RefreshCw className={syncing ? shell.spin : ""} size={15} />{" "}
@@ -295,29 +394,54 @@ export function NfeDetailClient() {
               <span>{error}</span>
             </div>
           ) : null}
-          <section className={styles.metrics}>
+          <section
+            className={`${styles.metrics} ${!financial ? styles.operationalMetrics : ""}`}
+          >
             <Metric
               label="Valor da nota"
               value={money(invoice.valor)}
               icon={<ReceiptText />}
             />
-            <Metric
-              label="Venda líquida"
-              value={money(invoice.vendaLiquida)}
-              icon={<Banknote />}
-            />
-            <Metric
-              label="Lucro"
-              value={money(invoice.lucro)}
-              icon={<CircleDollarSign />}
-              tone={Number(invoice.lucro) < 0 ? "red" : "green"}
-            />
-            <Metric
-              label="Margem"
-              value={`${invoice.margemLucro}%`}
-              icon={<Activity />}
-              tone={Number(invoice.margemLucro) < 0 ? "red" : "blue"}
-            />
+            {financial ? (
+              <>
+                <Metric
+                  label="Venda líquida"
+                  value={money(invoice.vendaLiquida)}
+                  icon={<Banknote />}
+                />
+                <Metric
+                  label="Lucro"
+                  value={money(invoice.lucro)}
+                  icon={<CircleDollarSign />}
+                  tone={Number(invoice.lucro) < 0 ? "red" : "green"}
+                />
+                <Metric
+                  label="Margem"
+                  value={`${invoice.margemLucro}%`}
+                  icon={<Activity />}
+                  tone={Number(invoice.margemLucro) < 0 ? "red" : "blue"}
+                />
+              </>
+            ) : (
+              <>
+                <Metric
+                  label="Itens"
+                  value={String(data.items.length)}
+                  icon={<Boxes />}
+                />
+                <Metric
+                  label="Boletos"
+                  value={String(data.boletos.length)}
+                  icon={<Banknote />}
+                />
+                <Metric
+                  label="Envio"
+                  value={invoice.statusEnvio}
+                  icon={<Activity />}
+                  tone={invoice.statusEnvio === "Falhou" ? "red" : "green"}
+                />
+              </>
+            )}
           </section>
           <div className={styles.detailGrid}>
             <section className={styles.panel}>
@@ -414,70 +538,124 @@ export function NfeDetailClient() {
               <b>{data.items.length} ITENS</b>
             </header>
             <div className={styles.tableWrap}>
-              <table>
+              <table className={financial ? styles.financialItemsTable : undefined}>
                 <thead>
                   <tr>
                     <th>Item / produto</th>
                     <th>CFOP</th>
-                    <th>Quantidade</th>
-                    <th>Venda líquida</th>
-                    <th>Custo líquido</th>
-                    <th>Impostos</th>
-                    <th>Lucro</th>
-                    <th>Margem</th>
+                        <th>Quantidade</th>
+                        {financial ? (
+                          <>
+                            <th>Desconto do item</th>
+                            <th>Frete do item</th>
+                            <th>Outras despesas</th>
+                            <th>Venda líquida</th>
+                        <th>Custo líquido</th>
+                        <th>Impostos</th>
+                        <th>Lucro</th>
+                        <th>Margem</th>
+                      </>
+                    ) : null}
+                    <th>Ação</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.items.map((item) => (
-                    <tr key={item.id}>
+                    <tr
+                      key={item.id}
+                      className={
+                        item.inconsistencia ? styles.inconsistentRow : undefined
+                      }
+                    >
                       <td>
                         <strong>{item.nome}</strong>
-                        <small>
+                        <small className={styles.productCode}>
                           {item.codigo ?? item.produtoId ?? "Sem código"}
-                          {item.inconsistencia
-                            ? ` · ${item.inconsistencia}`
-                            : ""}
                         </small>
+                        {item.inconsistencia ? (
+                          <span className={styles.inconsistencyBadge}>
+                            <AlertTriangle size={12} />
+                            <span>{item.inconsistencia}</span>
+                          </span>
+                        ) : null}
                       </td>
                       <td>{item.cfop ?? "—"}</td>
                       <td>{number(item.quantidade)}</td>
-                      <td>{money(item.vendaLiquida)}</td>
-                      <td>{money(item.custoLiquido)}</td>
+                      {financial ? (
+                        <>
+                          <td>{money(item.desconto)}</td>
+                          <td>{money(item.frete)}</td>
+                          <td
+                            className={
+                              Number(item.outrasDespesas) > 0
+                                ? styles.expenseValue
+                                : undefined
+                            }
+                            title="Valor informado no campo vOutro do XML da NF-e"
+                          >
+                            {money(item.outrasDespesas)}
+                            {Number(item.outrasDespesas) > 0 ? (
+                              <small>Campo vOutro do XML</small>
+                            ) : null}
+                          </td>
+                          <td>{money(item.vendaLiquida)}</td>
+                          <td>{money(item.custoLiquido)}</td>
+                          <td>
+                            {money(item.impostos)}
+                            <small>
+                              Créditos:{" "}
+                              {money(
+                                String(
+                                  Number(item.creditoIpi) +
+                                    Number(item.creditoIcms),
+                                ),
+                              )}
+                            </small>
+                          </td>
+                          <td
+                            className={
+                              Number(item.lucro) < 0
+                                ? styles.negative
+                                : styles.positive
+                            }
+                          >
+                            {money(item.lucro)}
+                          </td>
+                          <td
+                            className={
+                              Number(item.margemLucro) < 0
+                                ? styles.negative
+                                : styles.positive
+                            }
+                          >
+                            {item.margemLucro}%
+                          </td>
+                        </>
+                      ) : null}
                       <td>
-                        {money(item.impostos)}
-                        <small>
-                          Créditos:{" "}
-                          {money(
-                            String(
-                              Number(item.creditoIpi) +
-                                Number(item.creditoIcms),
-                            ),
-                          )}
-                        </small>
-                      </td>
-                      <td
-                        className={
-                          Number(item.lucro) < 0
-                            ? styles.negative
-                            : styles.positive
-                        }
-                      >
-                        {money(item.lucro)}
-                      </td>
-                      <td
-                        className={
-                          Number(item.margemLucro) < 0
-                            ? styles.negative
-                            : styles.positive
-                        }
-                      >
-                        {item.margemLucro}%
+                        {item.produtoId === null &&
+                        session.permissions.includes("people:manage") ? (
+                          <button
+                            className={styles.normalizeButton}
+                            type="button"
+                            onClick={() => openNormalization(item)}
+                          >
+                            <Link2 size={13} /> Vincular produto
+                          </button>
+                        ) : (
+                          <span className={styles.linkedProduct}>
+                            {item.produtoId ? "Vinculado" : "—"}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
                   {data.items.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className={styles.tableEmpty}>
+                      <td
+                        colSpan={financial ? 12 : 4}
+                        className={styles.tableEmpty}
+                      >
                         Nenhum item persistido para esta nota.
                       </td>
                     </tr>
@@ -486,52 +664,15 @@ export function NfeDetailClient() {
               </table>
             </div>
           </section>
-          <div className={styles.detailGrid}>
-            <section className={styles.panel}>
-              <header>
-                <div>
-                  <span>FINANCEIRO</span>
-                  <h2>Composição do resultado</h2>
-                </div>
-                <CircleDollarSign size={18} />
-              </header>
-              <div className={styles.breakdown}>
-                <Breakdown label="Valor bruto" value={invoice.valor} />
-                <Breakdown label="Desconto" value={invoice.desconto} negative />
-                <Breakdown label="Frete" value={invoice.frete} />
-                <Breakdown
-                  label="Outras despesas"
-                  value={invoice.outrasDespesas}
-                />
-                <Breakdown
-                  label="Custos líquidos"
-                  value={invoice.custoLiquido}
-                  negative
-                />
-                <Breakdown label="Impostos" value={invoice.impostos} negative />
-                <Breakdown label="Taxas" value={invoice.taxa} negative />
-                <Breakdown
-                  label="Créditos fiscais"
-                  value={String(
-                    Number(invoice.creditoIpi) + Number(invoice.creditoIcms),
-                  )}
-                />
-                <Breakdown
-                  label="Lucro persistido"
-                  value={invoice.lucro}
-                  total
-                />
-              </div>
-              {invoice.observacaoCalculo ? (
-                <div className={styles.note}>
-                  <Info size={14} />
-                  <span>
-                    <b>Observação do cálculo</b>
-                    {invoice.observacaoCalculo}
-                  </span>
-                </div>
-              ) : null}
-            </section>
+          {financial && data.financialBreakdown ? (
+            <FinancialMemory
+              breakdown={data.financialBreakdown}
+              calculationNote={invoice.observacaoCalculo}
+            />
+          ) : null}
+          <div
+            className={`${styles.detailGrid} ${financial ? styles.billingGrid : ""}`}
+          >
             <section className={styles.panel}>
               <header>
                 <div>
@@ -580,6 +721,106 @@ export function NfeDetailClient() {
           </div>
         </div>
       </section>
+      {normalizingItem ? (
+        <div
+          className={styles.modalBackdrop}
+          role="presentation"
+          onMouseDown={() => !normalizing && setNormalizingItem(null)}
+        >
+          <section
+            className={styles.normalizationModal}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="normalize-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span>NORMALIZAÇÃO DE ITEM</span>
+                <h2 id="normalize-title">Vincular produto sincronizado</h2>
+                <p>
+                  Item {normalizingItem.item ?? normalizingItem.id}:{" "}
+                  {normalizingItem.nome}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar"
+                disabled={normalizing}
+                onClick={() => setNormalizingItem(null)}
+              >
+                <X size={17} />
+              </button>
+            </header>
+            <label className={styles.productSearch}>
+              <span>Buscar por nome, SKU ou ID Bling</span>
+              <div>
+                <Search size={15} />
+                <input
+                  autoFocus
+                  value={productSearch}
+                  onChange={(event) => setProductSearch(event.target.value)}
+                  placeholder="Digite para localizar o produto correto"
+                />
+                {loadingProducts ? (
+                  <LoaderCircle className={shell.spin} size={15} />
+                ) : null}
+              </div>
+            </label>
+            {productError ? (
+              <p className={styles.productError}>{productError}</p>
+            ) : null}
+            <div className={styles.productResults}>
+              {products.map((product) => (
+                <button
+                  className={
+                    selectedProductId === product.id
+                      ? styles.selectedProduct
+                      : ""
+                  }
+                  type="button"
+                  key={product.id}
+                  onClick={() => setSelectedProductId(product.id)}
+                >
+                  <span>
+                    <strong>{product.nome}</strong>
+                    <small>
+                      SKU {product.codigo ?? "não informado"} · Bling{" "}
+                      {product.blingId ?? "sem ID"}
+                    </small>
+                  </span>
+                  <b>{product.custo ? money(product.custo) : "Sem custo"}</b>
+                </button>
+              ))}
+              {!loadingProducts && products.length === 0 && !productError ? (
+                <p>Nenhum produto sincronizado encontrado.</p>
+              ) : null}
+            </div>
+            <footer>
+              <button
+                type="button"
+                disabled={normalizing}
+                onClick={() => setNormalizingItem(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                className={styles.confirmNormalization}
+                type="button"
+                disabled={normalizing || selectedProductId === null}
+                onClick={() => void normalizeItem()}
+              >
+                {normalizing ? (
+                  <LoaderCircle className={shell.spin} size={14} />
+                ) : (
+                  <Link2 size={14} />
+                )}
+                Vincular e recalcular
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -634,26 +875,259 @@ function Status({ value }: { value: string }) {
     </span>
   );
 }
-function Breakdown({
+function FinancialMemory({
+  breakdown,
+  calculationNote,
+}: {
+  breakdown: NonNullable<NfeDetailResponse["financialBreakdown"]>;
+  calculationNote: string | null;
+}) {
+  const costLines: CalculationLine[] = [
+    {
+      label: "Custo dos produtos",
+      value: breakdown.costs.productCost,
+      operation: "base",
+      detail: "Custo cadastrado × quantidade dos itens",
+    },
+    ...breakdown.costs.additions.map((entry) => ({
+      label: entry.label,
+      value: entry.value,
+      operation: "add" as const,
+      detail: componentDetail(entry.rate, null, null, entry.items),
+    })),
+    ...breakdown.costs.credits.map((entry) => ({
+      label: entry.label,
+      value: entry.value,
+      operation: "subtract" as const,
+      detail: creditDetail(entry.rate, entry.items),
+    })),
+    ...adjustmentLine(breakdown.costs.adjustment, "Ajuste do cálculo persistido"),
+  ];
+  const taxLines: CalculationLine[] = [
+    ...breakdown.taxes.items.map((entry) => ({
+      label: entry.label,
+      value: entry.value,
+      operation: "add" as const,
+      detail: componentDetail(
+        entry.rate,
+        entry.baseValue,
+        entry.cst,
+        entry.items,
+      ),
+    })),
+    ...adjustmentLine(
+      breakdown.taxes.adjustment,
+      "Ajuste conforme regime tributário",
+    ),
+  ];
+  const feeLines: CalculationLine[] = [
+    ...breakdown.fees.items.map((entry) => ({
+      label: entry.label,
+      value: entry.value,
+      operation: "add" as const,
+      detail: componentDetail(entry.rate, null, null, entry.items),
+    })),
+    ...adjustmentLine(breakdown.fees.adjustment, "Ajuste do cálculo persistido"),
+  ];
+
+  return (
+    <section className={`${styles.panel} ${styles.financialMemory}`}>
+      <header>
+        <div>
+          <span>MEMÓRIA DE CÁLCULO</span>
+          <h2>Como o resultado desta NF-e foi formado</h2>
+        </div>
+        <b>VALORES PERSISTIDOS</b>
+      </header>
+      <div className={styles.memoryIntro}>
+        <Calculator size={17} />
+        <p>
+          Cada parcela abaixo vem do processamento fiscal da nota. Créditos são
+          deduções; custos, impostos e taxas reduzem o resultado.
+        </p>
+      </div>
+      <div className={styles.calculationGrid}>
+        <CalculationCard
+          icon={<Boxes size={16} />}
+          title="Custos líquidos"
+          subtitle="Produto, adicionais e créditos"
+          lines={costLines}
+          total={breakdown.costs.total}
+        />
+        <CalculationCard
+          icon={<ReceiptText size={16} />}
+          title="Impostos"
+          subtitle="Tributos considerados no cálculo"
+          lines={taxLines}
+          total={breakdown.taxes.total}
+        />
+        <CalculationCard
+          icon={<Tags size={16} />}
+          title="Taxas"
+          subtitle="Comissões e taxas operacionais"
+          lines={feeLines}
+          total={breakdown.fees.total}
+        />
+      </div>
+      <div className={styles.profitMemory}>
+        <div className={styles.profitHeading}>
+          <span>
+            <CircleDollarSign size={17} />
+          </span>
+          <div>
+            <small>RESULTADO FINAL</small>
+            <h3>Composição do lucro</h3>
+          </div>
+        </div>
+        <div className={styles.profitEquation}>
+          <EquationTerm
+            label="Venda líquida"
+            value={breakdown.profit.revenue}
+            operation="base"
+          />
+          {breakdown.profit.deductions.map((entry) => (
+            <EquationTerm
+              key={entry.label}
+              label={entry.label}
+              value={entry.value}
+              operation="subtract"
+            />
+          ))}
+          <EquationTerm
+            label="Lucro da NF-e"
+            value={breakdown.profit.total}
+            operation="total"
+          />
+        </div>
+      </div>
+      {calculationNote ? (
+        <div className={styles.note}>
+          <Info size={14} />
+          <span>
+            <b>Observação do cálculo</b>
+            {calculationNote}
+          </span>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+type CalculationLine = {
+  label: string;
+  value: string;
+  operation: "base" | "add" | "subtract";
+  detail?: string | null;
+};
+
+function CalculationCard({
+  icon,
+  title,
+  subtitle,
+  lines,
+  total,
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle: string;
+  lines: CalculationLine[];
+  total: string;
+}) {
+  return (
+    <article className={styles.calculationCard}>
+      <header>
+        <span>{icon}</span>
+        <div>
+          <h3>{title}</h3>
+          <p>{subtitle}</p>
+        </div>
+      </header>
+      <div className={styles.calculationLines}>
+        {lines.length > 0 ? (
+          lines.map((line, index) => (
+            <div
+              key={`${line.label}-${index}`}
+              className={styles.calculationLine}
+            >
+              <span className={styles.operation} aria-hidden="true">
+                {line.operation === "add"
+                  ? "+"
+                  : line.operation === "subtract"
+                    ? "−"
+                    : ""}
+              </span>
+              <div>
+                <strong>{line.label}</strong>
+                {line.detail ? <small>{line.detail}</small> : null}
+              </div>
+              <b>{money(line.value)}</b>
+            </div>
+          ))
+        ) : (
+          <p className={styles.noComponents}>Nenhuma parcela aplicada.</p>
+        )}
+      </div>
+      <footer>
+        <span>= Total</span>
+        <strong>{money(total)}</strong>
+      </footer>
+    </article>
+  );
+}
+
+function EquationTerm({
   label,
   value,
-  negative,
-  total,
+  operation,
 }: {
   label: string;
   value: string;
-  negative?: boolean;
-  total?: boolean;
+  operation: "base" | "subtract" | "total";
 }) {
   return (
-    <div className={total ? styles.breakdownTotal : ""}>
-      <span>{label}</span>
-      <strong>
-        {negative && Number(value) > 0 ? "− " : ""}
-        {money(value)}
-      </strong>
+    <div className={operation === "total" ? styles.equationTotal : ""}>
+      <span>
+        {operation === "subtract" ? "−" : operation === "total" ? "=" : ""}
+      </span>
+      <small>{label}</small>
+      <strong>{money(value)}</strong>
     </div>
   );
+}
+
+function adjustmentLine(value: string, label: string): CalculationLine[] {
+  const amount = Number(value);
+  if (Math.abs(amount) < 0.01) return [];
+  return [
+    {
+      label,
+      value: String(Math.abs(amount)),
+      operation: amount < 0 ? "subtract" : "add",
+      detail: "Conciliação com o total gravado no processamento",
+    },
+  ];
+}
+
+function componentDetail(
+  rate: string | null,
+  baseValue: string | null,
+  cst: string | null,
+  items: number,
+): string | null {
+  const parts: string[] = [];
+  if (rate && Number(rate) !== 0) parts.push(`${number(rate)}%`);
+  if (baseValue && Number(baseValue) !== 0)
+    parts.push(`base ${money(baseValue)}`);
+  if (cst) parts.push(`CST ${cst}`);
+  if (items > 0) parts.push(`${items} ${items === 1 ? "item" : "itens"}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+function creditDetail(rate: string | null, items: number): string | null {
+  const parts: string[] = [];
+  if (rate && Number(rate) !== 0)
+    parts.push(`${number(rate)}% sobre o custo dos produtos`);
+  if (items > 0) parts.push(`${items} ${items === 1 ? "item" : "itens"}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 function money(value: string): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -696,14 +1170,6 @@ function safeHttpUrl(value: string | null): string | null {
   } catch {
     return null;
   }
-}
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part[0] ?? "")
-    .join("")
-    .toUpperCase();
 }
 async function responseMessage(response: Response): Promise<string> {
   const body = (await response.json().catch(() => null)) as {

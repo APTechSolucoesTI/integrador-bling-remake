@@ -15,6 +15,11 @@
     "build": "corepack pnpm prisma:generate && tsc -p tsconfig.build.json",
     "prisma:format": "prisma format",
     "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:seed": "prisma db seed",
+    "migrate:legacy": "tsx src/legacy-import.ts",
+    "bling:import-token": "tsx src/bling-import-token.ts",
     "test": "vitest run",
     "typecheck": "corepack pnpm prisma:generate && tsc -p tsconfig.json --noEmit"
   },
@@ -27,6 +32,7 @@
   "devDependencies": {
     "@types/pg": "^8.15.0",
     "prisma": "7.9.1",
+    "tsx": "4.20.0",
     "typescript": "6.0.3",
     "vitest": "4.1.10"
   }

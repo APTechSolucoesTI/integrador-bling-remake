@@ -34,7 +34,8 @@ export interface BlingNfeSummary {
 }
 
 export interface ListNfeInput {
-  status: 5 | 6;
+  status: 2 | 5 | 6;
+  direction?: 0 | 1;
   issuedFrom: string;
   issuedTo: string;
   page: number;
@@ -88,6 +89,11 @@ export interface BlingContactDetail {
   mobile?: string;
 }
 
+export interface BlingContactUpdate {
+  id: string;
+  mobile?: string;
+}
+
 export interface ListBlingProductsInput {
   page: number;
   limit: number;
@@ -116,6 +122,28 @@ export interface BlingProductGroup {
   parentName?: string;
 }
 
+export interface BlingPaymentMethod {
+  id: string;
+  description?: string;
+  paymentType?: string;
+}
+
+export interface BlingSalesChannel {
+  id: string;
+  description?: string;
+  channelType?: string;
+}
+
+export interface BlingSeller {
+  id: string;
+  name?: string;
+}
+
+export interface BlingOperationNature {
+  id: string;
+  description?: string;
+}
+
 export interface ListBlingSalesOrdersInput {
   page: number;
   limit: number;
@@ -142,11 +170,21 @@ export interface BlingGateway {
     context: GatewayContext,
     input: ListNfeInput,
   ): Promise<BlingNfeSummary[]>;
+  listPaymentMethods(context: GatewayContext): Promise<BlingPaymentMethod[]>;
+  listSalesChannels(context: GatewayContext): Promise<BlingSalesChannel[]>;
+  listSellers(context: GatewayContext): Promise<BlingSeller[]>;
+  listOperationNatures(
+    context: GatewayContext,
+  ): Promise<BlingOperationNature[]>;
 }
 
 export interface BlingAccessTokenProvider {
   getAccessToken(tenantId: string, correlationId: string): Promise<string>;
   handleUnauthorized(tenantId: string, correlationId: string): Promise<void>;
+}
+
+export interface BlingRateLimiter {
+  waitForTurn(context: GatewayContext): Promise<void>;
 }
 
 interface BlingRealGatewayOptions {
@@ -155,6 +193,7 @@ interface BlingRealGatewayOptions {
   fetch?: typeof fetch;
   timeoutMs?: number;
   minimumIntervalMs?: number;
+  rateLimiter?: BlingRateLimiter;
 }
 
 const BLING_BASE_URL = "https://api.bling.com.br/Api/v3";
@@ -181,7 +220,7 @@ export class BlingRealGateway implements BlingGateway {
       pagina: String(input.page),
       limite: String(input.limit),
       situacao: String(input.status),
-      tipo: "1",
+      tipo: String(input.direction ?? 1),
       dataEmissaoInicial: input.issuedFrom,
       dataEmissaoFinal: input.issuedTo,
     });
@@ -320,10 +359,22 @@ export class BlingRealGateway implements BlingGateway {
   ): Promise<BlingBoletoBatch> {
     assertSafeIdentifier(nfeId, "NF-e");
     const params = new URLSearchParams({ idOrigem: nfeId });
-    const payload = await this.#request(
-      context,
-      `/contas/receber/boletos?${params.toString()}`,
-    );
+    let payload: Record<string, unknown>;
+    try {
+      payload = await this.#request(
+        context,
+        `/contas/receber/boletos?${params.toString()}`,
+      );
+    } catch (error) {
+      // O Bling responde 404 quando a forma está classificada como boleto,
+      // mas a NF-e não possui cobrança gerada (caso comum em notas ML Full).
+      // No legado isso era tratado como coleção vazia e não impedia que o
+      // valor, XML e cálculo da nota fossem persistidos.
+      if (error instanceof Error && error.message === "BlingHttpError:404") {
+        return { accounts: [] };
+      }
+      throw error;
+    }
     const data = record(payload["data"]);
     if (!data) return { accounts: [] };
     const sale = record(data["venda"]);
@@ -423,6 +474,32 @@ export class BlingRealGateway implements BlingGateway {
     };
   }
 
+  async updateContactMobile(
+    context: GatewayContext,
+    contactId: string,
+    mobile: string,
+  ): Promise<BlingContactUpdate> {
+    assertSafeIdentifier(contactId, "contato");
+    const current = await this.#request(
+      context,
+      `/contatos/${encodeURIComponent(contactId)}`,
+    );
+    const data = record(current["data"]);
+    const id = stringOrNumberValue(data?.["id"]);
+    if (!data || id === undefined) throw new Error("BlingInvalidContactDetail");
+
+    // O Bling exige o cadastro completo no PUT. Preservamos todos os campos
+    // recebidos no GET e alteramos somente o celular, como no legado.
+    const payload = { ...data, celular: mobile };
+    await this.#request(
+      context,
+      `/contatos/${encodeURIComponent(contactId)}`,
+      { method: "PUT", body: JSON.stringify(payload) },
+      true,
+    );
+    return { id, ...(mobile ? { mobile } : {}) };
+  }
+
   async listProducts(
     context: GatewayContext,
     input: ListBlingProductsInput,
@@ -477,7 +554,8 @@ export class BlingRealGateway implements BlingGateway {
     const taxation = record(data["tributacao"]);
     const group = record(taxation?.["grupoProduto"]);
     const rawNcm = stringOrNumberValue(taxation?.["ncm"]);
-    const ncm = rawNcm?.replace(/[.,\s]+/g, "");
+    const normalizedNcm = rawNcm?.replace(/\D+/g, "");
+    const ncm = normalizedNcm?.length === 8 ? normalizedNcm : undefined;
     const productGroupId = stringOrNumberValue(group?.["id"]);
     return {
       id,
@@ -513,6 +591,83 @@ export class BlingRealGateway implements BlingGateway {
           ...(parentName === undefined ? {} : { parentName }),
         },
       ];
+    });
+  }
+
+  async listPaymentMethods(
+    context: GatewayContext,
+  ): Promise<BlingPaymentMethod[]> {
+    const payload = await this.#request(
+      context,
+      "/formas-pagamentos?pagina=1&limite=100",
+    );
+    return arrayValue(payload["data"]).flatMap((raw) => {
+      const item = record(raw);
+      const id = stringOrNumberValue(item?.["id"]);
+      if (!item || id === undefined) return [];
+      const description = stringValue(item["descricao"]);
+      const paymentType = stringOrNumberValue(item["tipoPagamento"]);
+      return [
+        {
+          id,
+          ...(description === undefined ? {} : { description }),
+          ...(paymentType === undefined ? {} : { paymentType }),
+        },
+      ];
+    });
+  }
+
+  async listSalesChannels(
+    context: GatewayContext,
+  ): Promise<BlingSalesChannel[]> {
+    const payload = await this.#request(
+      context,
+      "/canais-venda?situacao=1&pagina=1&limite=100",
+    );
+    return arrayValue(payload["data"]).flatMap((raw) => {
+      const item = record(raw);
+      const id = stringOrNumberValue(item?.["id"]);
+      if (!item || id === undefined) return [];
+      const description = stringValue(item["descricao"]);
+      const channelType = stringValue(item["tipo"]);
+      return [
+        {
+          id,
+          ...(description === undefined ? {} : { description }),
+          ...(channelType === undefined ? {} : { channelType }),
+        },
+      ];
+    });
+  }
+
+  async listSellers(context: GatewayContext): Promise<BlingSeller[]> {
+    const payload = await this.#request(
+      context,
+      "/vendedores?situacaoContato=A&pagina=1&limite=100",
+    );
+    return arrayValue(payload["data"]).flatMap((raw) => {
+      const item = record(raw);
+      const id = stringOrNumberValue(item?.["id"]);
+      if (!item || id === undefined) return [];
+      const contact = record(item["contato"]);
+      const name = stringValue(contact?.["nome"]);
+      return [{ id, ...(name === undefined ? {} : { name }) }];
+    });
+  }
+
+  async listOperationNatures(
+    context: GatewayContext,
+  ): Promise<BlingOperationNature[]> {
+    const payload = await this.#request(
+      context,
+      "/naturezas-operacoes?situacao=1&pagina=1&limite=100",
+    );
+    return arrayValue(payload["data"]).flatMap((raw) => {
+      const item = record(raw);
+      const id = stringOrNumberValue(item?.["id"]);
+      if (!item || id === undefined) return [];
+      const description = stringValue(item["descricao"]);
+      return [{ id, ...(description === undefined ? {} : { description }) }];
     });
   }
 
@@ -580,49 +735,80 @@ export class BlingRealGateway implements BlingGateway {
   async #request(
     context: GatewayContext,
     relativePath: string,
+    init: Pick<RequestInit, "method" | "body"> = {},
+    allowEmpty = false,
   ): Promise<Record<string, unknown>> {
     assertRealOutboundAllowed("Bling", context, this.options.globalDemoMode);
     if (!relativePath.startsWith("/") || relativePath.includes("://")) {
       throw new Error("Caminho Bling inválido");
     }
 
-    const token = await this.options.tokenProvider.getAccessToken(
-      context.tenantId,
-      context.correlationId,
-    );
-    await this.#waitForRateLimit();
-    const response = await this.#fetch(`${BLING_BASE_URL}${relativePath}`, {
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${token}`,
-        "enable-jwt": "1",
-        "x-correlation-id": context.correlationId,
-      },
-      signal: AbortSignal.timeout(this.#timeoutMs),
-    });
-
-    if (response.status === 401) {
-      await this.options.tokenProvider.handleUnauthorized(
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const token = await this.options.tokenProvider.getAccessToken(
         context.tenantId,
         context.correlationId,
       );
-      throw new Error("BlingUnauthorized");
-    }
-    if (!response.ok) throw new Error(`BlingHttpError:${response.status}`);
+      await this.options.rateLimiter?.waitForTurn(context);
+      await this.#waitForRateLimit();
+      const response = await this.#fetch(`${BLING_BASE_URL}${relativePath}`, {
+        ...init,
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${token}`,
+          ...(init.body ? { "content-type": "application/json" } : {}),
+          "enable-jwt": "1",
+          "x-correlation-id": context.correlationId,
+        },
+        signal: AbortSignal.timeout(this.#timeoutMs),
+      });
 
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.toLowerCase().includes("application/json")) {
-      throw new Error("BlingInvalidContentType");
+      if (response.status === 401 && attempt === 0) {
+        await this.options.tokenProvider.handleUnauthorized(
+          context.tenantId,
+          context.correlationId,
+        );
+        continue;
+      }
+      if (response.status === 401) throw new Error("BlingUnauthorized");
+      if (response.status === 403) throw new Error("BlingForbidden");
+      // A NF-e recém-listada pode ficar alguns instantes indisponível no
+      // endpoint de detalhe do Bling. O legado repetia todo o enriquecimento
+      // até três vezes; sem esta equivalência o remake persistia a nota com
+      // valor zero e só a corrigia em uma ressincronização manual posterior.
+      if (
+        response.status === 404 &&
+        /^\/nfe\/[^/?]+$/.test(relativePath) &&
+        attempt < 2
+      ) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 500 * (attempt + 1)),
+        );
+        continue;
+      }
+      if ((response.status === 429 || response.status >= 500) && attempt < 2) {
+        await waitForRetry(response, attempt);
+        continue;
+      }
+      if (response.status === 429) throw new Error("BlingRateLimited");
+      if (!response.ok) throw new Error(`BlingHttpError:${response.status}`);
+
+      if (allowEmpty && response.status === 204) return {};
+      const contentType = response.headers.get("content-type") ?? "";
+      if (allowEmpty && !contentType) return {};
+      if (!contentType.toLowerCase().includes("application/json")) {
+        throw new Error("BlingInvalidContentType");
+      }
+      const payload: unknown = await response.json();
+      if (
+        typeof payload !== "object" ||
+        payload === null ||
+        Array.isArray(payload)
+      ) {
+        throw new Error("BlingInvalidPayload");
+      }
+      return payload as Record<string, unknown>;
     }
-    const payload: unknown = await response.json();
-    if (
-      typeof payload !== "object" ||
-      payload === null ||
-      Array.isArray(payload)
-    ) {
-      throw new Error("BlingInvalidPayload");
-    }
-    return payload as Record<string, unknown>;
+    throw new Error("BlingRetryExhausted");
   }
 
   async #waitForRateLimit(): Promise<void> {
@@ -633,6 +819,18 @@ export class BlingRealGateway implements BlingGateway {
     if (waitMs > 0)
       await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
   }
+}
+
+async function waitForRetry(
+  response: Response,
+  attempt: number,
+): Promise<void> {
+  const retryAfter = Number(response.headers.get("retry-after"));
+  const delay =
+    Number.isFinite(retryAfter) && retryAfter > 0
+      ? Math.min(retryAfter * 1_000, 30_000)
+      : 500 * 2 ** attempt;
+  await new Promise<void>((resolve) => setTimeout(resolve, delay));
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -706,5 +904,43 @@ export class BlingFakeGateway implements BlingGateway {
         ...nfe,
       })),
     );
+  }
+
+  listPaymentMethods(_context: GatewayContext): Promise<BlingPaymentMethod[]> {
+    void _context;
+    return Promise.resolve([
+      { id: "1", description: "Dinheiro", paymentType: "1" },
+      { id: "15", description: "Boleto bancário", paymentType: "15" },
+    ]);
+  }
+
+  listSalesChannels(_context: GatewayContext): Promise<BlingSalesChannel[]> {
+    void _context;
+    return Promise.resolve([
+      { id: "1001", description: "Venda direta", channelType: "LojaFisica" },
+      {
+        id: "1002",
+        description: "Mercado Livre",
+        channelType: "MercadoLivre",
+      },
+    ]);
+  }
+
+  listSellers(_context: GatewayContext): Promise<BlingSeller[]> {
+    void _context;
+    return Promise.resolve([
+      { id: "501", name: "Equipe comercial" },
+      { id: "502", name: "Venda interna" },
+    ]);
+  }
+
+  listOperationNatures(
+    _context: GatewayContext,
+  ): Promise<BlingOperationNature[]> {
+    void _context;
+    return Promise.resolve([
+      { id: "601", description: "Venda de mercadoria" },
+      { id: "602", description: "Venda interestadual" },
+    ]);
   }
 }

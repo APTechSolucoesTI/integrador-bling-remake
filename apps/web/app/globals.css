@@ -769,3 +769,10 @@ td button {
     padding-inline: 11px;
   }
 }
+@media (min-width: 821px) {
+  body:has([data-app-sidebar]) main > section {
+    margin-left: var(--app-sidebar-width, 242px) !important;
+    width: calc(100% - var(--app-sidebar-width, 242px)) !important;
+    transition: margin-left 0.22s ease;
+  }
+}

@@ -314,7 +314,7 @@
 .miniHeading strong {
   font: 650 18px var(--font-display);
 }
-.miniHeading button {
+.miniHeading .syncState {
   display: flex;
   align-items: center;
   gap: 6px;

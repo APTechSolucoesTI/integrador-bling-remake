@@ -1,9 +1,12 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { AppModule } from "./app.module.js";
 
-const app = await NestFactory.create(AppModule, { bufferLogs: true });
+const RootModule =
+  process.env["BOOTSTRAP_SMOKE_MODE"] === "true"
+    ? (await import("./smoke.module.js")).SmokeModule
+    : (await import("./app.module.js")).AppModule;
+const app = await NestFactory.create(RootModule, { bufferLogs: true });
 app.enableShutdownHooks();
 app.enableCors({
   origin: process.env["WEB_ORIGIN"] ?? "http://localhost:3000",

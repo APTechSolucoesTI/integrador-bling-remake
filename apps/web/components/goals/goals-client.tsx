@@ -1,13 +1,13 @@
 "use client";
 
 import type {
+  GoalDetailResponse,
   GoalListResponse,
   GoalResourcesResponse,
   SessionResponse,
 } from "@integrador/contracts";
 import {
   Activity,
-  Bell,
   Boxes,
   Building2,
   CalendarDays,
@@ -16,15 +16,17 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
+  Download,
   FileText,
   Filter,
   Gauge,
   Goal,
-  HelpCircle,
   LoaderCircle,
   LogOut,
   Menu,
+  Orbit,
   Plus,
+  Pencil,
   RefreshCw,
   Search,
   Settings,
@@ -40,6 +42,10 @@ import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
+import { ApplicationSidebar } from "../layout/application-sidebar";
+import { ApplicationHeaderActions } from "../layout/application-header-actions";
+import { ApplicationGlobalSearch } from "../layout/application-global-search";
+import { downloadCsv } from "../../lib/csv";
 import shell from "../nfe/nfe.module.css";
 import styles from "./goals.module.css";
 
@@ -60,8 +66,11 @@ const emptyFilters: GoalFilters = {
 interface TargetDraft {
   id: number;
   value: string;
+  commissionType: "P" | "R" | null;
+  commission: string;
 }
 interface GoalDraft {
+  id: number | null;
   competencia: string;
   dataInicial: string;
   dataFinal: string;
@@ -78,6 +87,7 @@ function initialGoal(): GoalDraft {
     new Date(year, date.getMonth() + 1, 0).getDate(),
   ).padStart(2, "0");
   return {
+    id: null,
     competencia: `${month}/${year}`,
     dataInicial: `${year}-${month}-01`,
     dataFinal: `${year}-${month}-${last}`,
@@ -127,7 +137,7 @@ export function GoalsClient() {
         setData((await response.json()) as GoalListResponse);
         setApplied(next);
       } catch {
-        setError("Não foi possível consultar as metas do PostgreSQL legado.");
+        setError("Não foi possível consultar as metas sincronizadas.");
       } finally {
         setLoading(false);
       }
@@ -150,6 +160,14 @@ export function GoalsClient() {
         const nextSession = (await response.json()) as SessionResponse;
         if (active) {
           setSession(nextSession);
+          const resourcesResponse = await fetch(`${API_URL}/v1/goals/resources`, {
+            credentials: "include",
+          });
+          if (resourcesResponse.ok && active) {
+            setResources(
+              (await resourcesResponse.json()) as GoalResourcesResponse,
+            );
+          }
           await requestList(emptyFilters);
         }
       } catch {
@@ -198,45 +216,84 @@ export function GoalsClient() {
     }
   }
 
-  async function createGoal() {
+  async function openEdit(id: number) {
+    setGoalAction(`${id}:edit`);
+    setError(null);
+    try {
+      const [resourcesResponse, goalResponse] = await Promise.all([
+        fetch(`${API_URL}/v1/goals/resources`, { credentials: "include" }),
+        fetch(`${API_URL}/v1/goals/${id}`, { credentials: "include" }),
+      ]);
+      if (!resourcesResponse.ok || !goalResponse.ok)
+        throw new Error(await responseMessage(goalResponse));
+      const detail = (await goalResponse.json()) as GoalDetailResponse;
+      setResources((await resourcesResponse.json()) as GoalResourcesResponse);
+      setGoalDraft({
+        id: detail.id,
+        competencia: detail.competencia,
+        dataInicial: detail.dataInicial,
+        dataFinal: detail.dataFinal,
+        vendors: detail.vendors,
+        sectors: detail.sectors,
+        costs: detail.costs,
+      });
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível carregar a meta.",
+      );
+    } finally {
+      setGoalAction(null);
+    }
+  }
+
+  async function saveGoal() {
     if (!goalDraft) return;
     setSaving(true);
     setError(null);
     setSuccess(null);
     try {
-      const response = await fetch(`${API_URL}/v1/goals`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...goalDraft,
-          vendors: goalDraft.vendors.map((target) => ({
-            ...target,
-            value: normalizeMoney(target.value),
-            commissionType: null,
-            commission: "0.00",
-          })),
-          sectors: goalDraft.sectors.map((target) => ({
-            ...target,
-            value: normalizeMoney(target.value),
-            commissionType: null,
-            commission: "0.00",
-          })),
-          costs: goalDraft.costs.map((cost) => ({
-            ...cost,
-            value: normalizeMoney(cost.value),
-          })),
-        }),
-      });
+      const response = await fetch(
+        `${API_URL}/v1/goals${goalDraft.id ? `/${goalDraft.id}` : ""}`,
+        {
+          method: goalDraft.id ? "PATCH" : "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            competencia: goalDraft.competencia,
+            dataInicial: goalDraft.dataInicial,
+            dataFinal: goalDraft.dataFinal,
+            vendors: goalDraft.vendors.map((target) => ({
+              ...target,
+              value: normalizeMoney(target.value),
+              commission: normalizeMoney(target.commission),
+            })),
+            sectors: goalDraft.sectors.map((target) => ({
+              ...target,
+              value: normalizeMoney(target.value),
+              commission: normalizeMoney(target.commission),
+            })),
+            costs: goalDraft.costs.map((cost) => ({
+              ...cost,
+              value: normalizeMoney(cost.value),
+            })),
+          }),
+        },
+      );
       if (!response.ok) throw new Error(await responseMessage(response));
       setData((await response.json()) as GoalListResponse);
       setGoalDraft(null);
-      setSuccess("Meta aberta e vinculada à estrutura comercial.");
+      setSuccess(
+        goalDraft.id
+          ? "Meta atualizada com sua estrutura comercial."
+          : "Meta aberta e vinculada à estrutura comercial.",
+      );
     } catch (cause) {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Não foi possível criar a meta.",
+          : "Não foi possível salvar a meta.",
       );
     } finally {
       setSaving(false);
@@ -258,7 +315,7 @@ export function GoalsClient() {
       setData((await response.json()) as GoalListResponse);
       setSuccess(
         action === "finalize"
-          ? "Meta finalizada e ciclo seguinte preparado conforme a regra do legado."
+          ? "Meta finalizada e ciclo seguinte preparado automaticamente."
           : "Meta cancelada com sucesso.",
       );
     } catch (cause) {
@@ -291,21 +348,59 @@ export function GoalsClient() {
     );
   }
 
+  function exportCurrentPage() {
+    if (!data?.items.length) return;
+    downloadCsv(
+      `metas-pagina-${data.pagination.page}`,
+      [
+        "Competência",
+        "Início",
+        "Fim",
+        "Status",
+        "Meta vendedores",
+        "Meta setores",
+        "Custo planejado",
+        "Vendedores",
+        "Setores",
+        "Custos",
+      ],
+      data.items.map((item) => [
+        item.competencia,
+        item.dataInicial,
+        item.dataFinal,
+        item.status,
+        item.valorMetaVendedores,
+        item.valorMetaSetores,
+        item.custoPlanejado,
+        item.vendedores,
+        item.setores,
+        item.custos,
+      ]),
+    );
+  }
+
   return (
     <main className={shell.shell}>
+      <ApplicationSidebar session={session} open={menuOpen} onLogout={logout} />
       <aside
+        hidden
+        style={{ display: "none" }}
         className={`${shell.sidebar} ${menuOpen ? shell.sidebarOpen : ""}`}
       >
         <Link className={shell.brand} href="/">
           <span>
-            <Workflow size={18} />
+            <Orbit size={18} />
           </span>
           <div>
             <strong>APBling</strong>
             <small>BLING OPERATIONS</small>
           </div>
         </Link>
-        <button className={shell.tenant} type="button" disabled>
+        <Link
+          className={shell.tenant}
+          href="/app/dashboard#organization"
+          title="Trocar organização"
+        >
           <span>
             <Building2 size={16} />
           </span>
@@ -314,7 +409,7 @@ export function GoalsClient() {
             <strong>{session.tenant.name}</strong>
           </div>
           <ChevronDown size={14} />
-        </button>
+        </Link>
         <nav className={shell.nav}>
           <p>OPERAÇÃO</p>
           <Link href="/app/dashboard">
@@ -353,7 +448,7 @@ export function GoalsClient() {
               <Building2 size={17} /> Empresas
             </Link>
           ) : null}
-          {session.role === "owner" || session.role === "admin" ? (
+          {session.permissions.includes("users:manage") ? (
             <Link href="/app/users">
               <ShieldCheck size={17} /> Usuários e acesso
             </Link>
@@ -363,9 +458,6 @@ export function GoalsClient() {
           </Link>
         </nav>
         <div className={shell.sidebarFooter}>
-          <span>
-            <HelpCircle size={16} /> Central de ajuda
-          </span>
           <button type="button" onClick={() => void logout()}>
             <LogOut size={16} /> Sair
           </button>
@@ -381,26 +473,8 @@ export function GoalsClient() {
           >
             <Menu size={20} />
           </button>
-          <label className={shell.globalSearch}>
-            <Search size={16} />
-            <input
-              placeholder="Buscar competência..."
-              value={filters.competencia}
-              onChange={(event) =>
-                setFilters({ ...filters, competencia: event.target.value })
-              }
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void requestList(filters);
-              }}
-            />
-          </label>
-          <span className={shell.dbBadge}>
-            <Goal size={14} /> Planejamento real
-          </span>
-          <button className={shell.iconButton} type="button">
-            <Bell size={17} />
-          </button>
-          <div className={shell.avatar}>{initials(session.user.name)}</div>
+          <ApplicationGlobalSearch />
+          <ApplicationHeaderActions session={session} onLogout={logout} />
         </header>
 
         <div className={shell.content}>
@@ -409,11 +483,20 @@ export function GoalsClient() {
               <span className={shell.eyebrow}>PLANEJAMENTO · METAS</span>
               <h1>Metas comerciais</h1>
               <p>
-                Competências, custos planejados, setores e vendedores do legado.
+                Competências, custos planejados, setores e vendedores
+                sincronizados.
               </p>
             </div>
             <div className={styles.actions}>
-              {session.role === "owner" || session.role === "admin" ? (
+              <button
+                className={shell.refreshButton}
+                type="button"
+                disabled={!data?.items.length}
+                onClick={exportCurrentPage}
+              >
+                <Download size={15} /> Exportar CSV
+              </button>
+              {session.permissions.includes("goals:manage") ? (
                 <button
                   className={styles.createButton}
                   type="button"
@@ -481,12 +564,19 @@ export function GoalsClient() {
             <div className={styles.filtersGrid}>
               <label className={shell.field}>
                 <span>Competência</span>
-                <input
+                <select
                   value={filters.competencia}
                   onChange={(event) =>
                     setFilters({ ...filters, competencia: event.target.value })
                   }
-                />
+                >
+                  <option value="">Todas as competências</option>
+                  {resources?.competences.map((competence) => (
+                    <option key={competence} value={competence}>
+                      {competence}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className={shell.field}>
                 <span>Data inicial exata</span>
@@ -551,8 +641,7 @@ export function GoalsClient() {
               const target =
                 Number(goal.valorMetaVendedores) +
                 Number(goal.valorMetaSetores);
-              const canManage =
-                session.role === "owner" || session.role === "admin";
+              const canManage = session.permissions.includes("goals:manage");
               return (
                 <article className={styles.goalCard} key={goal.id}>
                   <header>
@@ -606,6 +695,18 @@ export function GoalsClient() {
                     <span>Ciclo registrado no PostgreSQL</span>
                     {canManage && goal.statusId === 1 ? (
                       <div className={styles.goalActions}>
+                        <button
+                          type="button"
+                          onClick={() => void openEdit(goal.id)}
+                          disabled={Boolean(goalAction)}
+                        >
+                          {goalAction === `${goal.id}:edit` ? (
+                            <LoaderCircle className={shell.spin} size={13} />
+                          ) : (
+                            <Pencil size={13} />
+                          )}{" "}
+                          Editar
+                        </button>
                         <button
                           type="button"
                           onClick={() => void changeGoal(goal.id, "cancel")}
@@ -677,7 +778,7 @@ export function GoalsClient() {
           saving={saving}
           onChange={setGoalDraft}
           onClose={() => setGoalDraft(null)}
-          onSave={createGoal}
+          onSave={saveGoal}
         />
       ) : null}
     </main>
@@ -700,14 +801,6 @@ function formatDate(value: string | null): string {
   if (!value) return "—";
   const [year, month, day] = value.split("-");
   return year && month && day ? `${day}/${month}/${year}` : value;
-}
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part[0] ?? "")
-    .join("")
-    .toUpperCase();
 }
 function normalizeMoney(value: string): string {
   const normalized = value.replace(",", ".");
@@ -744,7 +837,15 @@ function GoalModal({
     onChange({
       ...draft,
       [collection]: enabled
-        ? [...current, { id, value: "0.00" }]
+        ? [
+            ...current,
+            {
+              id,
+              value: "0.00",
+              commissionType: null,
+              commission: "0.00",
+            },
+          ]
         : current.filter((item) => item.id !== id),
     });
   }
@@ -769,7 +870,7 @@ function GoalModal({
         <header>
           <div>
             <span>PLANEJAMENTO COMERCIAL</span>
-            <h2>Nova meta mensal</h2>
+            <h2>{draft.id ? "Editar meta mensal" : "Nova meta mensal"}</h2>
           </div>
           <button type="button" onClick={onClose}>
             <X size={17} />
@@ -913,7 +1014,7 @@ function GoalModal({
             ) : (
               <Check size={14} />
             )}{" "}
-            Criar meta
+            {draft.id ? "Salvar meta" : "Criar meta"}
           </button>
         </footer>
       </section>

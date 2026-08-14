@@ -8,29 +8,24 @@ import {
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
+  ALL_MODULE_PERMISSIONS,
   adminUsersResponseSchema,
   tenantSettingsResponseSchema,
   type AdminCreateUser,
   type AdminUpdateUser,
   type AdminUsersResponse,
+  type AccessProfileInput,
+  type AccessProfilesResponse,
   type TenantSettingsResponse,
   type TenantSettingsUpdate,
   type OrganizationCreate,
   type OrganizationsResponse,
   organizationsResponseSchema,
 } from "@integrador/contracts";
-import { Prisma, type DatabaseClient } from "@integrador/db";
+import { type DatabaseClient } from "@integrador/db";
 import { hashPassword } from "@integrador/domain";
 import type { AuthPrincipal } from "../auth/auth.types.js";
 import { DATABASE_CLIENT } from "../database/database.module.js";
-
-interface TaxRegimeRow {
-  taxRegime: string | null;
-}
-interface PreferenceRow {
-  zoom: number | null;
-  menu: string | null;
-}
 
 @Injectable()
 export class AdministrationService {
@@ -39,32 +34,39 @@ export class AdministrationService {
   ) {}
 
   async users(principal: AuthPrincipal): Promise<AdminUsersResponse> {
+    const manageableTenantIds = await this.manageableTenantIds(principal);
     const memberships = await this.database.tenantMembership.findMany({
-      where: { tenantId: principal.activeTenantId, userId: { not: null } },
-      include: { user: true },
+      where: { tenantId: principal.activeTenantId },
+      include: { user: true, accessProfile: true },
       orderBy: { createdAt: "asc" },
     });
-    const items = memberships.flatMap((membership) =>
-      membership.user
-        ? [
-            {
-              id: membership.user.id,
-              name: membership.user.name,
-              email: membership.user.email,
-              role: membership.role,
-              active: membership.active && membership.user.active,
-              joinedAt: membership.createdAt.toISOString(),
-            },
-          ]
-        : [],
-    );
+    const sharedMemberships = await this.database.tenantMembership.findMany({
+      where: {
+        userId: { in: memberships.map(({ userId }) => userId) },
+        tenantId: { in: manageableTenantIds },
+      },
+      select: { userId: true, tenantId: true },
+    });
+    const items = memberships.map((membership) => ({
+      id: membership.user.id,
+      name: membership.user.name,
+      email: membership.user.email,
+      active: membership.active && membership.user.active,
+      joinedAt: membership.createdAt.toISOString(),
+      permissions: membership.accessProfile.permissions,
+      accessProfileId: membership.accessProfileId,
+      accessProfileName: membership.accessProfile.name,
+      tenantIds: sharedMemberships
+        .filter(({ userId }) => userId === membership.userId)
+        .map(({ tenantId }) => tenantId),
+    }));
     return adminUsersResponseSchema.parse({
       items,
       counts: {
         total: items.length,
         active: items.filter((item) => item.active).length,
-        administrators: items.filter(
-          (item) => item.role === "owner" || item.role === "admin",
+        administrators: items.filter((item) =>
+          item.permissions.includes("users:manage"),
         ).length,
       },
     });
@@ -74,29 +76,28 @@ export class AdministrationService {
     principal: AuthPrincipal,
     input: AdminCreateUser,
   ): Promise<AdminUsersResponse> {
-    if (principal.role === "admin" && input.role === "owner")
-      throw new BadRequestException(
-        "Somente proprietários podem criar outro proprietário",
-      );
     if (await this.database.user.findUnique({ where: { email: input.email } }))
       throw new ConflictException("Já existe um usuário com este e-mail");
+    const profile = await this.profileForTenant(
+      principal.activeTenantId,
+      input.accessProfileId,
+    );
+    const requestedTenantIds = Array.from(
+      new Set([principal.activeTenantId, ...input.tenantIds]),
+    );
+    await this.assertManageableTenants(principal, requestedTenantIds);
+    const profiles = await this.copyProfileToTenants(profile, requestedTenantIds);
     const passwordHash = await hashPassword(input.password);
     await this.database.$transaction(async (transaction) => {
-      const minimum = await transaction.tenantMembership.aggregate({
-        where: { tenantId: principal.activeTenantId },
-        _min: { legacyUserId: true },
-      });
-      const legacyUserId = Math.min(-1, (minimum._min.legacyUserId ?? 0) - 1);
       const user = await transaction.user.create({
         data: { name: input.name, email: input.email, passwordHash },
       });
-      await transaction.tenantMembership.create({
-        data: {
-          tenantId: principal.activeTenantId,
-          legacyUserId,
+      await transaction.tenantMembership.createMany({
+        data: requestedTenantIds.map((tenantId) => ({
+          tenantId,
           userId: user.id,
-          role: input.role,
-        },
+          accessProfileId: profiles.get(tenantId)!,
+        })),
       });
       await transaction.auditLog.create({
         data: {
@@ -106,7 +107,10 @@ export class AdministrationService {
           entityType: "user",
           entityId: user.id,
           correlationId: randomUUID(),
-          metadata: { role: input.role },
+          metadata: {
+            accessProfileId: profile.id,
+            accessProfileName: profile.name,
+          },
         },
       });
     });
@@ -122,46 +126,122 @@ export class AdministrationService {
       where: {
         tenantId_userId: { tenantId: principal.activeTenantId, userId },
       },
+      include: { accessProfile: true },
     });
     if (!membership)
       throw new NotFoundException("Usuário não pertence a esta empresa");
-    if (
-      principal.role === "admin" &&
-      (membership.role === "owner" || input.role === "owner")
-    )
-      throw new BadRequestException(
-        "Administradores não podem alterar proprietários",
-      );
     if (userId === principal.userId && input.active === false)
       throw new BadRequestException(
         "Você não pode desativar seu próprio acesso",
       );
-    const removingOwner =
-      membership.role === "owner" &&
-      (input.active === false || (input.role && input.role !== "owner"));
-    if (removingOwner) {
-      const owners = await this.database.tenantMembership.count({
-        where: {
-          tenantId: principal.activeTenantId,
-          role: "owner",
-          active: true,
-        },
+    if (input.email !== undefined) {
+      const conflict = await this.database.user.findFirst({
+        where: { email: input.email, NOT: { id: userId } },
+        select: { id: true },
       });
-      if (owners <= 1)
-        throw new BadRequestException(
-          "A empresa precisa manter ao menos um proprietário ativo",
-        );
+      if (conflict)
+        throw new ConflictException("Já existe um usuário com este e-mail");
     }
+    const profile = input.accessProfileId
+      ? await this.profileForTenant(
+          principal.activeTenantId,
+          input.accessProfileId,
+        )
+      : null;
+    const manageableTenantIds = await this.manageableTenantIds(principal);
+    const selectedTenantIds = input.tenantIds
+      ? Array.from(new Set(input.tenantIds))
+      : null;
+    if (selectedTenantIds) {
+      await this.assertManageableTenants(principal, selectedTenantIds);
+      if (userId === principal.userId && !selectedTenantIds.includes(principal.activeTenantId))
+        throw new BadRequestException("Você não pode remover seu próprio acesso");
+    }
+    const targetProfile = profile ?? membership.accessProfile;
+    const profileIds = selectedTenantIds
+      ? await this.copyProfileToTenants(targetProfile, selectedTenantIds)
+      : null;
+    if (
+      userId === principal.userId &&
+      profile &&
+      !profile.permissions.includes("users:manage")
+    )
+      throw new BadRequestException(
+        "Você não pode remover sua própria permissão de administrar usuários",
+      );
+    if (
+      membership.accessProfile.permissions.includes("users:manage") &&
+      (input.active === false ||
+        (profile && !profile.permissions.includes("users:manage")))
+    )
+      await this.ensureAnotherUserManager(
+        principal.activeTenantId,
+        membership.id,
+      );
+    const auditMetadata = {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.email !== undefined ? { email: input.email } : {}),
+      ...(input.active !== undefined ? { active: input.active } : {}),
+      ...(input.accessProfileId !== undefined
+        ? { accessProfileId: input.accessProfileId }
+        : {}),
+      ...(input.password !== undefined ? { passwordChanged: true } : {}),
+    };
     await this.database.$transaction([
+      this.database.user.update({
+        where: { id: userId },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.email !== undefined ? { email: input.email } : {}),
+          ...(input.password !== undefined
+            ? { passwordHash: await hashPassword(input.password) }
+            : {}),
+        },
+      }),
       this.database.tenantMembership.update({
         where: {
           tenantId_userId: { tenantId: principal.activeTenantId, userId },
         },
         data: {
-          ...(input.role !== undefined ? { role: input.role } : {}),
           ...(input.active !== undefined ? { active: input.active } : {}),
+          ...(input.accessProfileId !== undefined
+            ? { accessProfileId: input.accessProfileId }
+            : {}),
         },
       }),
+      ...(selectedTenantIds && profileIds
+        ? selectedTenantIds
+            .filter((tenantId) => tenantId !== principal.activeTenantId)
+            .map((tenantId) =>
+              this.database.tenantMembership.upsert({
+                where: { tenantId_userId: { tenantId, userId } },
+                create: {
+                  tenantId,
+                  userId,
+                  accessProfileId: profileIds.get(tenantId)!,
+                  active: input.active ?? true,
+                },
+                update: {
+                  accessProfileId: profileIds.get(tenantId)!,
+                  active: input.active ?? true,
+                },
+              }),
+            )
+        : []),
+      ...(selectedTenantIds
+        ? [
+            this.database.tenantMembership.deleteMany({
+              where: {
+                userId,
+                tenantId: {
+                  in: manageableTenantIds.filter(
+                    (tenantId) => !selectedTenantIds.includes(tenantId),
+                  ),
+                },
+              },
+            }),
+          ]
+        : []),
       this.database.auditLog.create({
         data: {
           tenantId: principal.activeTenantId,
@@ -170,16 +250,254 @@ export class AdministrationService {
           entityType: "user",
           entityId: userId,
           correlationId: randomUUID(),
-          metadata: input,
+          metadata: auditMetadata,
         },
       }),
     ]);
     return this.users(principal);
   }
 
+  async removeUser(
+    principal: AuthPrincipal,
+    userId: string,
+  ): Promise<AdminUsersResponse> {
+    const membership = await this.database.tenantMembership.findUnique({
+      where: {
+        tenantId_userId: { tenantId: principal.activeTenantId, userId },
+      },
+      include: { accessProfile: true },
+    });
+    if (!membership)
+      throw new NotFoundException("Usuário não pertence a esta empresa");
+    if (userId === principal.userId)
+      throw new BadRequestException("Você não pode remover seu próprio acesso");
+    if (membership.accessProfile.permissions.includes("users:manage")) {
+      const managers = await this.database.tenantMembership.count({
+        where: {
+          tenantId: principal.activeTenantId,
+          accessProfile: { permissions: { has: "users:manage" } },
+          active: true,
+        },
+      });
+      if (managers <= 1)
+        throw new BadRequestException(
+          "A empresa precisa manter ao menos um usuário ativo com permissão para administrar usuários",
+        );
+    }
+    await this.database.$transaction([
+      this.database.authSession.updateMany({
+        where: {
+          userId,
+          activeTenantId: principal.activeTenantId,
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      }),
+      this.database.tenantMembership.delete({
+        where: {
+          tenantId_userId: { tenantId: principal.activeTenantId, userId },
+        },
+      }),
+      this.database.auditLog.create({
+        data: {
+          tenantId: principal.activeTenantId,
+          actorUserId: principal.userId,
+          action: "administration.user.removed",
+          entityType: "user",
+          entityId: userId,
+          correlationId: randomUUID(),
+          metadata: { previousAccessProfileId: membership.accessProfileId },
+        },
+      }),
+    ]);
+    return this.users(principal);
+  }
+
+  async accessProfiles(
+    principal: AuthPrincipal,
+  ): Promise<AccessProfilesResponse> {
+    const profiles = await this.database.accessProfile.findMany({
+      where: { tenantId: principal.activeTenantId },
+      include: { _count: { select: { memberships: true } } },
+      orderBy: { name: "asc" },
+    });
+    return {
+      items: profiles.map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        description: profile.description,
+        permissions:
+          profile.permissions as AccessProfilesResponse["items"][number]["permissions"],
+        assignedUsers: profile._count.memberships,
+        createdAt: profile.createdAt.toISOString(),
+        updatedAt: profile.updatedAt.toISOString(),
+      })),
+    };
+  }
+
+  async createAccessProfile(
+    principal: AuthPrincipal,
+    input: AccessProfileInput,
+  ): Promise<AccessProfilesResponse> {
+    const profileData = { ...input, description: input.description ?? null };
+    try {
+      await this.database.accessProfile.create({
+        data: { tenantId: principal.activeTenantId, ...profileData },
+      });
+    } catch (cause) {
+      if (this.isUniqueViolation(cause))
+        throw new ConflictException("Já existe um perfil com este nome");
+      throw cause;
+    }
+    return this.accessProfiles(principal);
+  }
+
+  async updateAccessProfile(
+    principal: AuthPrincipal,
+    profileId: string,
+    input: AccessProfileInput,
+  ): Promise<AccessProfilesResponse> {
+    const currentProfile = await this.profileForTenant(
+      principal.activeTenantId,
+      profileId,
+    );
+    const profileData = { ...input, description: input.description ?? null };
+    if (
+      currentProfile.permissions.includes("users:manage") &&
+      !profileData.permissions.includes("users:manage")
+    ) {
+      const otherManagers = await this.database.tenantMembership.count({
+        where: {
+          tenantId: principal.activeTenantId,
+          active: true,
+          accessProfileId: { not: profileId },
+          accessProfile: { permissions: { has: "users:manage" } },
+        },
+      });
+      if (otherManagers === 0)
+        throw new BadRequestException(
+          "A empresa precisa manter ao menos um perfil ativo com administração de usuários",
+        );
+    }
+    try {
+      await this.database.accessProfile.update({
+        where: { id: profileId },
+        data: profileData,
+      });
+    } catch (cause) {
+      if (this.isUniqueViolation(cause))
+        throw new ConflictException("Já existe um perfil com este nome");
+      throw cause;
+    }
+    return this.accessProfiles(principal);
+  }
+
+  async removeAccessProfile(
+    principal: AuthPrincipal,
+    profileId: string,
+  ): Promise<AccessProfilesResponse> {
+    await this.profileForTenant(principal.activeTenantId, profileId);
+    const assignedUsers = await this.database.tenantMembership.count({
+      where: { tenantId: principal.activeTenantId, accessProfileId: profileId },
+    });
+    if (assignedUsers > 0)
+      throw new ConflictException(
+        "Reatribua os usuários antes de excluir este perfil de acesso",
+      );
+    await this.database.accessProfile.delete({ where: { id: profileId } });
+    return this.accessProfiles(principal);
+  }
+
+  private async profileForTenant(tenantId: string, profileId: string) {
+    const profile = await this.database.accessProfile.findFirst({
+      where: { id: profileId, tenantId },
+    });
+    if (!profile)
+      throw new NotFoundException("Perfil de acesso não encontrado");
+    return profile;
+  }
+
+  private async ensureAnotherUserManager(
+    tenantId: string,
+    excludedMembershipId: string,
+  ): Promise<void> {
+    const managers = await this.database.tenantMembership.count({
+      where: {
+        tenantId,
+        active: true,
+        id: { not: excludedMembershipId },
+        accessProfile: { permissions: { has: "users:manage" } },
+      },
+    });
+    if (managers === 0)
+      throw new BadRequestException(
+        "A empresa precisa manter ao menos um usuário ativo com permissão para administrar usuários",
+      );
+  }
+
+  private isUniqueViolation(cause: unknown): boolean {
+    return (
+      typeof cause === "object" &&
+      cause !== null &&
+      "code" in cause &&
+      cause.code === "P2002"
+    );
+  }
+
+  private async manageableTenantIds(
+    principal: AuthPrincipal,
+  ): Promise<string[]> {
+    if (principal.superAdmin) {
+      const tenants = await this.database.tenant.findMany({
+        where: { active: true },
+        select: { id: true },
+      });
+      return tenants.map(({ id }) => id);
+    }
+    const memberships = await this.database.tenantMembership.findMany({
+      where: {
+        userId: principal.userId,
+        active: true,
+        accessProfile: { permissions: { has: "users:manage" } },
+      },
+      select: { tenantId: true },
+    });
+    return memberships.map(({ tenantId }) => tenantId);
+  }
+
+  private async assertManageableTenants(
+    principal: AuthPrincipal,
+    tenantIds: string[],
+  ): Promise<void> {
+    const allowed = new Set(await this.manageableTenantIds(principal));
+    if (tenantIds.some((tenantId) => !allowed.has(tenantId)))
+      throw new ForbiddenException("Uma ou mais unidades não podem ser administradas");
+  }
+
+  private async copyProfileToTenants(
+    profile: { name: string; description: string | null; permissions: string[] },
+    tenantIds: string[],
+  ): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    for (const tenantId of tenantIds) {
+      const target = await this.database.accessProfile.upsert({
+        where: { tenantId_name: { tenantId, name: profile.name } },
+        create: {
+          tenantId,
+          name: profile.name,
+          description: profile.description,
+          permissions: profile.permissions,
+        },
+        update: {},
+        select: { id: true },
+      });
+      result.set(tenantId, target.id);
+    }
+    return result;
+  }
+
   async settings(principal: AuthPrincipal): Promise<TenantSettingsResponse> {
-    const unitId = this.unit(principal);
-    const [tenant, membership, regimes, flags] = await Promise.all([
+    const [tenant, membership, preferences, flags] = await Promise.all([
       this.database.tenant.findUnique({
         where: { id: principal.activeTenantId },
       }),
@@ -191,10 +509,14 @@ export class AdministrationService {
           },
         },
       }),
-      this.database.$queryRaw<TaxRegimeRow[]>(Prisma.sql`
-        SELECT NULLIF(BTRIM(regime_tributario), '') AS "taxRegime"
-        FROM system_unit WHERE id = ${unitId} LIMIT 1
-      `),
+      this.database.userPreference.findUnique({
+        where: {
+          tenantId_userId: {
+            tenantId: principal.activeTenantId,
+            userId: principal.userId,
+          },
+        },
+      }),
       this.database.featureFlag.findMany({
         where: { tenantId: principal.activeTenantId },
         orderBy: { key: "asc" },
@@ -202,25 +524,17 @@ export class AdministrationService {
     ]);
     if (!tenant || !membership)
       throw new NotFoundException("Empresa não encontrada");
-    const preferences =
-      membership.legacyUserId > 0
-        ? await this.database.$queryRaw<PreferenceRow[]>(Prisma.sql`
-          SELECT zoom, menu FROM preferencia_geral
-          WHERE system_users_id = ${membership.legacyUserId} LIMIT 1
-        `)
-        : [];
     return tenantSettingsResponseSchema.parse({
       organization: {
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
         brandName: tenant.brandName,
-        legacyUnitId: unitId,
-        taxRegime: regimes[0]?.taxRegime ?? null,
+        legacyUnitId: tenant.legacyUnitId,
       },
       preferences: {
-        zoom: preferences[0]?.zoom ?? 100,
-        fixedMenu: preferences[0]?.menu !== "N",
+        zoom: preferences?.zoom ?? 100,
+        fixedMenu: preferences?.fixedMenu ?? true,
       },
       featureFlags: flags.map((flag) => ({
         key: flag.key,
@@ -233,7 +547,13 @@ export class AdministrationService {
     principal: AuthPrincipal,
     input: TenantSettingsUpdate,
   ): Promise<TenantSettingsResponse> {
-    const unitId = this.unit(principal);
+    if (
+      (input.name !== undefined || input.brandName !== undefined) &&
+      !principal.permissions.includes("settings:manage")
+    )
+      throw new ForbiddenException(
+        "Seu perfil não permite alterar dados da empresa",
+      );
     const membership = await this.database.tenantMembership.findUnique({
       where: {
         tenantId_userId: {
@@ -256,27 +576,27 @@ export class AdministrationService {
           },
         });
       }
-      if (input.taxRegime !== undefined) {
-        await transaction.$executeRaw(Prisma.sql`
-          UPDATE system_unit SET regime_tributario = ${input.taxRegime}
-          WHERE id = ${unitId}
-        `);
-      }
-      if (
-        (input.zoom !== undefined || input.fixedMenu !== undefined) &&
-        membership.legacyUserId > 0
-      ) {
-        const current = await transaction.$queryRaw<PreferenceRow[]>(Prisma.sql`
-          SELECT zoom, menu FROM preferencia_geral
-          WHERE system_users_id = ${membership.legacyUserId} LIMIT 1
-        `);
-        const zoom = input.zoom ?? current[0]?.zoom ?? 100;
-        const menu = (input.fixedMenu ?? current[0]?.menu !== "N") ? "S" : "N";
-        await transaction.$executeRaw(Prisma.sql`
-          INSERT INTO preferencia_geral (system_users_id, zoom, menu)
-          VALUES (${membership.legacyUserId}, ${zoom}, ${menu})
-          ON CONFLICT (system_users_id) DO UPDATE SET zoom = EXCLUDED.zoom, menu = EXCLUDED.menu
-        `);
+      if (input.zoom !== undefined || input.fixedMenu !== undefined) {
+        await transaction.userPreference.upsert({
+          where: {
+            tenantId_userId: {
+              tenantId: principal.activeTenantId,
+              userId: principal.userId,
+            },
+          },
+          create: {
+            tenantId: principal.activeTenantId,
+            userId: principal.userId,
+            zoom: input.zoom ?? 100,
+            fixedMenu: input.fixedMenu ?? true,
+          },
+          update: {
+            ...(input.zoom !== undefined ? { zoom: input.zoom } : {}),
+            ...(input.fixedMenu !== undefined
+              ? { fixedMenu: input.fixedMenu }
+              : {}),
+          },
+        });
       }
       await transaction.auditLog.create({
         data: {
@@ -342,12 +662,19 @@ export class AdministrationService {
           legacyUnitId: input.legacyUnitId,
         },
       });
+      const administratorProfile = await transaction.accessProfile.create({
+        data: {
+          tenantId: tenant.id,
+          name: "Administrador",
+          description: "Acesso completo à empresa, configurações e usuários.",
+          permissions: [...ALL_MODULE_PERMISSIONS],
+        },
+      });
       await transaction.tenantMembership.create({
         data: {
           tenantId: tenant.id,
-          legacyUserId: -1,
           userId: principal.userId,
-          role: "owner",
+          accessProfileId: administratorProfile.id,
         },
       });
       await transaction.auditLog.create({
@@ -363,11 +690,5 @@ export class AdministrationService {
       });
     });
     return this.organizations(principal);
-  }
-
-  private unit(principal: AuthPrincipal): number {
-    if (principal.tenantDemo || principal.legacyUnitId === null)
-      throw new BadRequestException("Empresa sem vínculo com o banco legado");
-    return principal.legacyUnitId;
   }
 }

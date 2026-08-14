@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx watch src/main.ts",
+    "bling:smoke": "tsx src/bling-smoke.ts",
     "start": "node dist/main.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -14,7 +15,9 @@
     "@integrador/contracts": "workspace:*",
     "@integrador/db": "workspace:*",
     "@integrador/integrations": "workspace:*",
-    "bullmq": "6.0.9"
+    "bullmq": "6.0.9",
+    "fast-xml-parser": "^5.10.1",
+    "ioredis": "^6.0.0"
   },
   "devDependencies": {
     "tsx": "^4.0.0",

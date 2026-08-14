@@ -177,9 +177,9 @@ export function LandingExperience() {
                 <small>AGOSTO 2026</small>
                 <strong>Visão geral</strong>
               </div>
-              <button type="button">
+              <span className={styles.syncState}>
                 Sincronizado <RefreshCw size={11} />
-              </button>
+              </span>
             </div>
             <div className={styles.miniMetrics}>
               <div>

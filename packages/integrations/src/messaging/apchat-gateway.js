@@ -18,8 +18,8 @@ export class ApChatRealGateway {
             typeof options === "boolean" ? fetch : (options.fetch ?? fetch);
         this.#baseUrl =
             typeof options === "boolean"
-                ? "https://api.apchat.com.br/v2/api/external"
-                : (options.baseUrl ?? "https://api.apchat.com.br/v2/api/external");
+                ? "https://api1.apchat.com.br/v2/api/external"
+                : (options.baseUrl ?? "https://api1.apchat.com.br/v2/api/external");
         this.#timeoutMs =
             typeof options === "boolean" ? 30_000 : (options.timeoutMs ?? 30_000);
     }
@@ -53,11 +53,33 @@ export class ApChatRealGateway {
         if (!response.ok ||
             normalizedBody.includes("message sent erro") ||
             normalizedBody.includes('"error"')) {
-            throw new Error(`ApChatHttpError:${response.status}`);
+            const detail = responseErrorDetail(responseBody, credentials.token);
+            throw new Error(`ApChatHttpError:${response.status}${detail ? `:${detail}` : ""}`);
         }
         const externalId = responseExternalId(responseBody) ?? message.idempotencyKey;
         return { externalId, accepted: true };
     }
+}
+function responseErrorDetail(body, token) {
+    try {
+        const parsed = JSON.parse(body);
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+            return undefined;
+        const record = parsed;
+        for (const key of ["error", "message"]) {
+            const value = record[key];
+            if (typeof value !== "string" || value.length === 0)
+                continue;
+            return value
+                .replaceAll(token, "[credencial protegida]")
+                .replace(/[\r\n\t]+/g, " ")
+                .slice(0, 200);
+        }
+    }
+    catch {
+        return undefined;
+    }
+    return undefined;
 }
 function normalizeBrazilianPhone(value) {
     const digits = value.replace(/\D/g, "");

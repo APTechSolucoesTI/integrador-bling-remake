@@ -7,7 +7,10 @@ import { DashboardModule } from "./dashboard/dashboard.module.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { HealthController } from "./health/health.controller.js";
 import { IntegrationsModule } from "./integrations/integrations.module.js";
+import { ImportsModule } from "./imports/imports.module.js";
 import { NfeModule } from "./nfe/nfe.module.js";
+import { MarketplaceFeesModule } from "./marketplace-fees/marketplace-fees.module.js";
+import { NotificationsModule } from "./notifications/notifications.module.js";
 import { QueueModule } from "./queue/queue.module.js";
 
 @Module({
@@ -17,10 +20,13 @@ import { QueueModule } from "./queue/queue.module.js";
     AuthModule,
     DashboardModule,
     NfeModule,
+    MarketplaceFeesModule,
     CatalogModule,
     AdministrationModule,
     BusinessModule,
     IntegrationsModule,
+    ImportsModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
 })

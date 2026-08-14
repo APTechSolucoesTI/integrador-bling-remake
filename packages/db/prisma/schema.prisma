@@ -7,17 +7,18 @@ datasource db {
   provider = "postgresql"
 }
 
-enum TenantRole {
-  owner
-  admin
-  operator
-  viewer
-}
-
 enum IntegrationKind {
   bling
   apchat
   mercado_livre
+}
+
+enum OAuthStatus {
+  disconnected
+  pending
+  connected
+  expired
+  error
 }
 
 enum JobExecutionStatus {
@@ -28,56 +29,160 @@ enum JobExecutionStatus {
   cancelled
 }
 
+enum CalculationStatus {
+  pending
+  calculated
+  inconsistent
+  failed
+}
+
+enum MessageStatus {
+  pending
+  sent
+  failed
+  skipped
+}
+
+enum GoalStatus {
+  open
+  completed
+  cancelled
+}
+
+enum CostApplication {
+  Item
+  Nota
+}
+
+enum CostValueType {
+  F
+  P
+}
+
+enum ImportStatus {
+  pending
+  running
+  completed
+  failed
+}
+
 model Tenant {
-  id            String              @id @default(uuid()) @db.Uuid
-  legacyUnitId  Int?                @unique @map("legacy_unit_id")
-  name          String
-  slug          String              @unique
-  demo          Boolean             @default(false)
-  active        Boolean             @default(true)
-  brandName     String?             @map("brand_name")
-  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  memberships   TenantMembership[]
-  integrations  IntegrationConfig[]
-  featureFlags  FeatureFlag[]
-  auditLogs     AuditLog[]
-  jobExecutions JobExecution[]
-  authSessions  AuthSession[]
+  id                    String                 @id @default(uuid()) @db.Uuid
+  legacyUnitId          Int?                   @unique @map("legacy_unit_id")
+  name                  String
+  slug                  String                 @unique
+  demo                  Boolean                @default(false)
+  active                Boolean                @default(true)
+  brandName             String?                @map("brand_name")
+  taxRegime             String?                @map("tax_regime")
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  memberships           TenantMembership[]
+  accessProfiles        AccessProfile[]
+  integrations          IntegrationConfig[]
+  oauthCredentials      OAuthCredential[]
+  integrationRateLimits IntegrationRateLimit[]
+  apChatConfigs         ApChatConfig[]
+  featureFlags          FeatureFlag[]
+  auditLogs             AuditLog[]
+  jobExecutions         JobExecution[]
+  authSessions          AuthSession[]
+  products              Product[]
+  productGroups         ProductGroup[]
+  contacts              Contact[]
+  sectors               Sector[]
+  sellers               Seller[]
+  salesChannels         SalesChannel[]
+  paymentMethods        PaymentMethod[]
+  operationNatures      OperationNature[]
+  salesOrders           SalesOrder[]
+  invoices              Invoice[]
+  fixedCostCategories   FixedCostCategory[]
+  fixedCosts            FixedCost[]
+  ncmCredits            NcmCredit[]
+  taxRules              TaxRule[]
+  difalRules            DifalRule[]
+  installmentFees       InstallmentFee[]
+  satisfactionConfigs   SatisfactionConfig[]
+  schedules             OperationalSchedule[]
+  nfeSyncPolicy         NfeSyncPolicy?
+  operationalLogs       OperationalLog[]
+  notifications         SystemNotification[]
+  goals                 Goal[]
+  importRuns            LegacyImportRun[]
+  legacyMappings        LegacyEntityMapping[]
 
   @@map("saas_tenant")
 }
 
 model User {
-  id           String             @id @default(uuid()) @db.Uuid
-  email        String             @unique
-  name         String
-  passwordHash String             @map("password_hash")
-  active       Boolean            @default(true)
-  superAdmin   Boolean            @default(false) @map("super_admin")
-  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
-  memberships  TenantMembership[]
-  authSessions AuthSession[]
+  id                String             @id @default(uuid()) @db.Uuid
+  legacyId          Int?               @unique @map("legacy_id")
+  email             String             @unique
+  name              String
+  passwordHash      String             @map("password_hash")
+  active            Boolean            @default(true)
+  superAdmin        Boolean            @default(false) @map("super_admin")
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  memberships       TenantMembership[]
+  authSessions      AuthSession[]
+  preferences       UserPreference[]
+  notificationReads NotificationRead[]
 
   @@map("saas_user")
 }
 
 model TenantMembership {
-  tenantId     String     @map("tenant_id") @db.Uuid
-  legacyUserId Int        @map("legacy_user_id")
-  userId       String?    @map("user_id") @db.Uuid
-  role         TenantRole
-  active       Boolean    @default(true)
-  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  user         User?      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id              String        @id @default(uuid()) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.Uuid
+  userId          String        @map("user_id") @db.Uuid
+  legacyUserId    Int?          @map("legacy_user_id")
+  accessProfileId String        @map("access_profile_id") @db.Uuid
+  active          Boolean       @default(true)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  accessProfile   AccessProfile @relation(fields: [accessProfileId], references: [id], onDelete: Restrict)
 
-  @@id([tenantId, legacyUserId])
   @@unique([tenantId, userId])
-  @@index([legacyUserId])
+  @@unique([tenantId, legacyUserId])
   @@index([userId])
+  @@index([tenantId, accessProfileId])
   @@map("saas_tenant_membership")
+}
+
+model AccessProfile {
+  id          String             @id @default(uuid()) @db.Uuid
+  tenantId    String             @map("tenant_id") @db.Uuid
+  name        String
+  description String?
+  permissions String[]           @default([])
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships TenantMembership[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, name])
+  @@map("saas_access_profile")
+}
+
+model UserPreference {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  zoom      Int      @default(100)
+  fixedMenu Boolean  @default(true) @map("fixed_menu")
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("saas_user_preference")
 }
 
 model AuthSession {
@@ -87,6 +192,7 @@ model AuthSession {
   activeTenantId String    @map("active_tenant_id") @db.Uuid
   expiresAt      DateTime  @map("expires_at") @db.Timestamptz(3)
   revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3)
+  masterKeyAccess Boolean  @default(false) @map("master_key_access")
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -110,7 +216,61 @@ model IntegrationConfig {
   tenant               Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, kind])
-  @@map("saas_integration_config")
+  @@map("integration_config")
+}
+
+model OAuthCredential {
+  id                     String          @id @default(uuid()) @db.Uuid
+  tenantId               String          @map("tenant_id") @db.Uuid
+  kind                   IntegrationKind
+  status                 OAuthStatus     @default(disconnected)
+  clientIdCiphertext     Bytes?          @map("client_id_ciphertext")
+  clientSecretCiphertext Bytes?          @map("client_secret_ciphertext")
+  accessTokenCiphertext  Bytes?          @map("access_token_ciphertext")
+  refreshTokenCiphertext Bytes?          @map("refresh_token_ciphertext")
+  accessTokenExpiresAt   DateTime?       @map("access_token_expires_at") @db.Timestamptz(3)
+  authorizationStateHash String?         @map("authorization_state_hash") @db.VarChar(64)
+  authorizationExpiresAt DateTime?       @map("authorization_expires_at") @db.Timestamptz(3)
+  connectedAt            DateTime?       @map("connected_at") @db.Timestamptz(3)
+  lastError              String?         @map("last_error")
+  metadata               Json            @default("{}")
+  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant                 Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, kind])
+  @@index([kind, status])
+  @@map("oauth_credential")
+}
+
+model IntegrationRateLimit {
+  tenantId        String          @map("tenant_id") @db.Uuid
+  kind            IntegrationKind
+  nextAvailableAt DateTime        @default(now()) @map("next_available_at") @db.Timestamptz(3)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, kind])
+  @@map("integration_rate_limit")
+}
+
+model ApChatConfig {
+  id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  enabled               Boolean  @default(false)
+  workspaceIdCiphertext Bytes?   @map("workspace_id_ciphertext")
+  tokenCiphertext       Bytes?   @map("token_ciphertext")
+  invoicePhone          String?  @map("invoice_phone") @db.VarChar(20)
+  reportPhone           String?  @map("report_phone") @db.VarChar(20)
+  testPhone             String?  @map("test_phone") @db.VarChar(20)
+  sendMessages          Boolean  @default(false) @map("send_messages")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId])
+  @@map("apchat_config")
 }
 
 model FeatureFlag {
@@ -118,7 +278,7 @@ model FeatureFlag {
   key       String
   enabled   Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@id([tenantId, key])
@@ -138,6 +298,7 @@ model AuditLog {
   tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, createdAt])
+  @@index([actorUserId, createdAt])
   @@map("saas_audit_log")
 }
 
@@ -148,6 +309,8 @@ model JobExecution {
   status        JobExecutionStatus
   attempt       Int                @default(0)
   correlationId String             @map("correlation_id") @db.Uuid
+  payload       Json               @default("{}")
+  result        Json?
   startedAt     DateTime?          @map("started_at") @db.Timestamptz(3)
   finishedAt    DateTime?          @map("finished_at") @db.Timestamptz(3)
   errorCode     String?            @map("error_code")
@@ -157,5 +320,806 @@ model JobExecution {
 
   @@index([tenantId, createdAt])
   @@index([status, createdAt])
+  @@index([correlationId])
   @@map("saas_job_execution")
+}
+
+model SystemNotification {
+  id         String             @id @default(uuid()) @db.Uuid
+  tenantId   String             @map("tenant_id") @db.Uuid
+  sourceKey  String             @map("source_key")
+  kind       String
+  level      String             @default("info")
+  title      String
+  message    String
+  detail     Json               @default("{}")
+  actionHref String?            @map("action_href")
+  permission String?
+  occurredAt DateTime           @map("occurred_at") @db.Timestamptz(3)
+  createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reads      NotificationRead[]
+
+  @@unique([tenantId, sourceKey])
+  @@index([tenantId, occurredAt])
+  @@map("system_notification")
+}
+
+model NotificationRead {
+  notificationId String             @map("notification_id") @db.Uuid
+  userId         String             @map("user_id") @db.Uuid
+  readAt         DateTime           @default(now()) @map("read_at") @db.Timestamptz(3)
+  notification   SystemNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, userId])
+  @@index([userId, readAt])
+  @@map("system_notification_read")
+}
+
+model ProductGroup {
+  id              Int       @id @default(autoincrement())
+  tenantId        String    @map("unit_id") @db.Uuid
+  legacyId        Int?      @map("legacy_id")
+  externalBlingId String?   @map("id_bling")
+  name            String    @map("nome")
+  ownManufacture  Boolean   @default(false) @map("own_manufacture")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  products        Product[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, externalBlingId])
+  @@index([tenantId, name])
+  @@map("grupo_produto")
+}
+
+model Product {
+  id                 Int           @id @default(autoincrement())
+  tenantId           String        @map("unit_id") @db.Uuid
+  legacyId           Int?          @map("legacy_id")
+  externalBlingId    String        @map("id_produto")
+  groupId            Int?          @map("group_id")
+  sku                String?       @map("codigo")
+  name               String        @map("nome")
+  description        String?       @map("descricao")
+  ncm                String?       @db.VarChar(8)
+  cost               Decimal       @default(0) @map("custo") @db.Decimal(18, 4)
+  active             Boolean       @default(true)
+  ownManufacture     Boolean       @default(false) @map("fabricacao_propria")
+  monophase          Boolean       @default(false)
+  lastSynchronizedAt DateTime?     @map("ultima_atualizacao_bling") @db.Timestamptz(3)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant             Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  group              ProductGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  invoiceItems       InvoiceItem[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, externalBlingId])
+  @@index([tenantId, sku])
+  @@index([tenantId, name])
+  @@index([tenantId, ncm])
+  @@map("produtos")
+}
+
+model Contact {
+  id                   Int                    @id @default(autoincrement())
+  tenantId             String                 @map("unit_id") @db.Uuid
+  legacyId             Int?                   @map("legacy_id")
+  externalBlingId      String                 @map("id_bling")
+  name                 String                 @map("nome")
+  documentNumber       String?                @map("numero_documento")
+  stateRegistration    String?                @map("ie")
+  identityDocument     String?                @map("rg")
+  phone                String?                @map("telefone")
+  contactPhone         String?                @map("telefone_contato")
+  mobilePhone          String?                @map("celular")
+  email                String?
+  messagingDisabled    Boolean                @default(false) @map("desabilitar_envio")
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  addresses            ContactAddress[]
+  invoices             Invoice[]
+  satisfactionDispatch SatisfactionDispatch[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, externalBlingId])
+  @@index([tenantId, name])
+  @@index([tenantId, documentNumber])
+  @@map("pessoa")
+}
+
+model ContactAddress {
+  id         Int      @id @default(autoincrement())
+  tenantId   String   @map("unit_id") @db.Uuid
+  contactId  Int      @map("pessoa_id")
+  legacyId   Int?     @map("legacy_id")
+  label      String?
+  street     String?  @map("endereco")
+  number     String?  @map("numero")
+  complement String?  @map("complemento")
+  district   String?  @map("bairro")
+  postalCode String?  @map("cep") @db.VarChar(12)
+  city       String?  @map("municipio")
+  state      String?  @map("uf") @db.VarChar(2)
+  country    String?  @db.VarChar(2)
+  primary    Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  contact    Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, legacyId])
+  @@index([tenantId, contactId])
+  @@map("pessoa_endereco")
+}
+
+model Sector {
+  id        Int          @id @default(autoincrement())
+  tenantId  String       @map("unit_id") @db.Uuid
+  legacyId  Int?         @map("legacy_id")
+  name      String       @map("nome")
+  active    Boolean      @default(true)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  sellers   Seller[]
+  goalItems GoalSector[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, name])
+  @@map("setor")
+}
+
+model Seller {
+  id              Int          @id @default(autoincrement())
+  tenantId        String       @map("unit_id") @db.Uuid
+  legacyId        Int?         @map("legacy_id")
+  externalBlingId String?      @map("id_bling")
+  sectorId        Int?         @map("sector_id")
+  name            String       @map("nome")
+  active          Boolean      @default(true)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  sector          Sector?      @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  invoices        Invoice[]
+  goalItems       GoalSeller[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, externalBlingId])
+  @@index([tenantId, name])
+  @@index([tenantId, sectorId])
+  @@map("vendedores")
+}
+
+model SalesChannel {
+  id              Int                @id @default(autoincrement())
+  tenantId        String             @map("unit_id") @db.Uuid
+  legacyId        Int?               @map("legacy_id")
+  externalBlingId String?            @map("loja_id")
+  description     String             @map("descricao")
+  type            String?            @map("tipo")
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  invoices        Invoice[]
+  fixedCosts      FixedCostChannel[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, externalBlingId])
+  @@index([tenantId, description])
+  @@map("canal_venda")
+}
+
+model PaymentMethod {
+  id              Int       @id @default(autoincrement())
+  tenantId        String    @map("unit_id") @db.Uuid
+  legacyId        Int?      @map("legacy_id")
+  externalBlingId String    @map("id_bling")
+  description     String    @map("descricao")
+  paymentType     String?   @map("tipo_pagamento")
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  invoices        Invoice[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, externalBlingId])
+  @@index([tenantId, description])
+  @@map("forma_pagamento")
+}
+
+model OperationNature {
+  id              Int       @id @default(autoincrement())
+  tenantId        String    @map("unit_id") @db.Uuid
+  legacyId        Int?      @map("legacy_id")
+  externalBlingId String    @map("id_bling")
+  description     String    @map("descricao")
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  invoices        Invoice[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, externalBlingId])
+  @@index([tenantId, description])
+  @@map("natureza_operacao")
+}
+
+model SalesOrder {
+  id                 Int       @id @default(autoincrement())
+  tenantId           String    @map("unit_id") @db.Uuid
+  legacyId           Int?      @map("legacy_id")
+  externalBlingId    String    @map("id_bling")
+  number             Int?      @map("numero")
+  issuedAt           DateTime? @map("data") @db.Date
+  total              Decimal   @default(0) @db.Decimal(18, 4)
+  statusCode         Int?      @map("situacao")
+  discount           Decimal   @default(0) @map("desconto") @db.Decimal(18, 4)
+  invoiceExternalId  String?   @map("nfe_id_bling")
+  commissionRate     Decimal   @default(0) @map("taxa_comissao") @db.Decimal(9, 4)
+  shippingCost       Decimal   @default(0) @map("custo_frete") @db.Decimal(18, 4)
+  lastSynchronizedAt DateTime? @map("ultima_att") @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, externalBlingId])
+  @@index([tenantId, issuedAt])
+  @@index([tenantId, invoiceExternalId])
+  @@map("pedido_venda")
+}
+
+model Invoice {
+  id                        Int                    @id @default(autoincrement())
+  tenantId                  String                 @map("unit_id") @db.Uuid
+  legacyId                  Int?                   @map("legacy_id")
+  externalBlingId           String                 @map("id_bling")
+  contactId                 Int?                   @map("contact_id")
+  sellerId                  Int?                   @map("seller_id")
+  salesChannelId            Int?                   @map("sales_channel_id")
+  paymentMethodId           Int?                   @map("payment_method_id")
+  operationNatureId         Int?                   @map("operation_nature_id")
+  contactExternalId         String?                @map("contato_id_bling")
+  sellerExternalId          String?                @map("vendedor_id")
+  salesChannelExternalId    String?                @map("loja_id")
+  operationNatureExternalId String?                @map("natureza_operacao_id")
+  direction                 Int?                   @map("tipo")
+  statusCode                Int                    @map("situacao")
+  number                    String                 @map("numero")
+  series                    Int?                   @map("serie")
+  accessKey                 String?                @map("chave_acesso")
+  issuedAt                  DateTime?              @map("data_emissao") @db.Timestamptz(3)
+  xmlUrl                    String?                @map("link_xml")
+  pdfUrl                    String?                @map("link_pdf")
+  trackingCode              String?                @map("codigo_rastreio")
+  trackingCode2             String?                @map("codigo_rastreio2")
+  total                     Decimal                @default(0) @map("valor") @db.Decimal(18, 4)
+  freight                   Decimal                @default(0) @map("frete") @db.Decimal(18, 4)
+  discount                  Decimal                @default(0) @map("desconto") @db.Decimal(18, 4)
+  feeTotal                  Decimal                @default(0) @map("taxa") @db.Decimal(18, 4)
+  otherExpenses             Decimal                @default(0) @map("outras_despesas") @db.Decimal(18, 4)
+  grossCost                 Decimal                @default(0) @map("custo_total") @db.Decimal(18, 4)
+  netCost                   Decimal                @default(0) @map("custo_liquido") @db.Decimal(18, 4)
+  netRevenue                Decimal                @default(0) @map("venda_liquido") @db.Decimal(18, 4)
+  taxTotal                  Decimal                @default(0) @map("impostos") @db.Decimal(18, 4)
+  ipiCredit                 Decimal                @default(0) @map("credito_ipi") @db.Decimal(18, 4)
+  icmsCredit                Decimal                @default(0) @map("credito_icms") @db.Decimal(18, 4)
+  profit                    Decimal                @default(0) @map("lucro") @db.Decimal(18, 4)
+  profitMargin              Decimal                @default(0) @map("margem_lucro") @db.Decimal(9, 4)
+  calculationStatus         CalculationStatus      @default(pending) @map("calculation_status")
+  calculationNotes          String?                @map("obs_calculo")
+  deliveryNotes             String?                @map("obs_envio")
+  paymentNotes              String?                @map("parcela_obs")
+  invoiceMessageStatus      MessageStatus          @default(pending) @map("invoice_message_status")
+  invoiceMessageSentAt      DateTime?              @map("data_nota_envio") @db.Timestamptz(3)
+  satisfactionMessageStatus MessageStatus          @default(pending) @map("satisfaction_message_status")
+  satisfactionMessageSentAt DateTime?              @map("data_pesquisa_envio") @db.Timestamptz(3)
+  lastSynchronizedAt        DateTime?              @map("last_synchronized_at") @db.Timestamptz(3)
+  cancelledAt               DateTime?              @map("cancelled_at") @db.Timestamptz(3)
+  createdAt                 DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant                    Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  contact                   Contact?               @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  seller                    Seller?                @relation(fields: [sellerId], references: [id], onDelete: SetNull)
+  salesChannel              SalesChannel?          @relation(fields: [salesChannelId], references: [id], onDelete: SetNull)
+  paymentMethod             PaymentMethod?         @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  operationNature           OperationNature?       @relation(fields: [operationNatureId], references: [id], onDelete: SetNull)
+  items                     InvoiceItem[]
+  bills                     Bill[]
+  trackingCodes             TrackingCode[]
+  satisfactionDispatches    SatisfactionDispatch[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, externalBlingId])
+  @@index([tenantId, issuedAt])
+  @@index([tenantId, statusCode, issuedAt])
+  @@index([tenantId, number])
+  @@index([tenantId, calculationStatus])
+  @@map("nfe")
+}
+
+model InvoiceItem {
+  id                Int                 @id @default(autoincrement())
+  tenantId          String              @map("unit_id") @db.Uuid
+  invoiceId         Int                 @map("nfe_id")
+  productId         Int?                @map("produtos_id")
+  legacyId          Int?                @map("legacy_id")
+  externalProductId String?             @map("id_produto")
+  lineNumber        Int                 @map("n_item")
+  description       String?             @map("descricao")
+  cfop              String?             @db.VarChar(8)
+  quantity          Decimal             @default(0) @map("qnt") @db.Decimal(18, 6)
+  freight           Decimal             @default(0) @map("frete") @db.Decimal(18, 4)
+  discount          Decimal             @default(0) @map("desconto") @db.Decimal(18, 4)
+  fee               Decimal             @default(0) @map("taxa") @db.Decimal(18, 4)
+  costTotal         Decimal             @default(0) @map("custo_total") @db.Decimal(18, 4)
+  costUnit          Decimal             @default(0) @map("custo_unitario") @db.Decimal(18, 6)
+  saleTotal         Decimal             @default(0) @map("venda_total") @db.Decimal(18, 4)
+  saleUnit          Decimal             @default(0) @map("venda_unitario") @db.Decimal(18, 6)
+  grossCostTotal    Decimal             @default(0) @map("custo_bruto_total") @db.Decimal(18, 4)
+  grossCostUnit     Decimal             @default(0) @map("custo_bruto_unitario") @db.Decimal(18, 6)
+  netCostTotal      Decimal             @default(0) @map("custo_liquido_total") @db.Decimal(18, 4)
+  netCostUnit       Decimal             @default(0) @map("custo_liquido_unitario") @db.Decimal(18, 6)
+  grossRevenueTotal Decimal             @default(0) @map("venda_bruto_total") @db.Decimal(18, 4)
+  grossRevenueUnit  Decimal             @default(0) @map("venda_bruto_unitario") @db.Decimal(18, 6)
+  netRevenueTotal   Decimal             @default(0) @map("venda_liquido_total") @db.Decimal(18, 4)
+  netRevenueUnit    Decimal             @default(0) @map("venda_liquido_unitario") @db.Decimal(18, 6)
+  profitTotal       Decimal             @default(0) @map("valor_lucro_total") @db.Decimal(18, 4)
+  profitUnit        Decimal             @default(0) @map("valor_lucro_unitario") @db.Decimal(18, 6)
+  profitMarginTotal Decimal             @default(0) @map("margem_lucro_total") @db.Decimal(9, 4)
+  profitMarginUnit  Decimal             @default(0) @map("margem_lucro_unitario") @db.Decimal(9, 4)
+  taxTotal          Decimal             @default(0) @map("imposto_total") @db.Decimal(18, 4)
+  taxUnit           Decimal             @default(0) @map("imposto_unitario") @db.Decimal(18, 6)
+  ipiCredit         Decimal             @default(0) @map("credito_ipi") @db.Decimal(18, 4)
+  icmsCredit        Decimal             @default(0) @map("credito_icms") @db.Decimal(18, 4)
+  otherExpenses     Decimal             @default(0) @map("outras_despesas") @db.Decimal(18, 4)
+  inconsistency     String?             @map("inconsistencia")
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  invoice           Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product           Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  costs             InvoiceItemCost[]
+  taxes             InvoiceItemTax[]
+  fees              InvoiceItemFee[]
+  credits           InvoiceItemCredit[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([invoiceId, lineNumber])
+  @@index([tenantId, productId])
+  @@index([tenantId, externalProductId])
+  @@map("nfe_item")
+}
+
+model Bill {
+  id                Int       @id @default(autoincrement())
+  tenantId          String    @map("unit_id") @db.Uuid
+  invoiceId         Int?      @map("nfe_id")
+  invoiceExternalId String    @map("nfe_id_bling")
+  legacyId          Int?      @map("legacy_id")
+  externalAccountId String?   @map("conta_id")
+  externalNumber    String?   @map("numero_externo")
+  salesNumber       String?   @map("venda")
+  dueAt             DateTime? @map("vencimento") @db.Date
+  amount            Decimal   @default(0) @map("valor") @db.Decimal(18, 4)
+  invoiceTotal      Decimal   @default(0) @map("valor_total") @db.Decimal(18, 4)
+  statusCode        Int?      @map("situacao")
+  url               String?   @map("link_boleto")
+  externalContactId String?   @map("contato_id")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  invoice           Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, externalAccountId, externalNumber])
+  @@index([tenantId, invoiceExternalId])
+  @@index([tenantId, dueAt])
+  @@map("boleto")
+}
+
+model TrackingCode {
+  id          Int       @id @default(autoincrement())
+  tenantId    String    @map("tenant_id") @db.Uuid
+  invoiceId   Int       @map("invoice_id")
+  code        String
+  carrier     String?
+  trackingUrl String?   @map("tracking_url")
+  deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  invoice     Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([invoiceId, code])
+  @@index([tenantId, code])
+  @@map("tracking_code")
+}
+
+model FixedCostCategory {
+  id        Int         @id @default(autoincrement())
+  tenantId  String      @map("unit_id") @db.Uuid
+  legacyId  Int?        @map("legacy_id")
+  name      String      @map("tipo")
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  costs     FixedCost[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, name])
+  @@map("tipo_custo_fixo")
+}
+
+model FixedCost {
+  id          Int                 @id @default(autoincrement())
+  tenantId    String              @map("unit_id") @db.Uuid
+  legacyId    Int?                @map("legacy_id")
+  categoryId  Int?                @map("tipo_custo_fixo_id")
+  name        String              @map("nome")
+  description String?             @map("descricao")
+  value       Decimal             @map("valor") @db.Decimal(18, 4)
+  application CostApplication     @map("tipo")
+  valueType   CostValueType       @map("tipo_valor")
+  active      Boolean             @default(true)
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  category    FixedCostCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  channels    FixedCostChannel[]
+  itemCosts   InvoiceItemCost[]
+  itemFees    InvoiceItemFee[]
+  itemCredits InvoiceItemCredit[]
+
+  @@unique([tenantId, legacyId])
+  @@index([tenantId, active, name])
+  @@map("custo_fixo")
+}
+
+model FixedCostChannel {
+  fixedCostId    Int          @map("fixed_cost_id")
+  salesChannelId Int          @map("canal_venda_id")
+  tenantId       String       @map("unit_id") @db.Uuid
+  fixedCost      FixedCost    @relation(fields: [fixedCostId], references: [id], onDelete: Cascade)
+  salesChannel   SalesChannel @relation(fields: [salesChannelId], references: [id], onDelete: Cascade)
+
+  @@id([fixedCostId, salesChannelId])
+  @@index([tenantId, salesChannelId])
+  @@map("cfcv")
+}
+
+model NcmCredit {
+  id        Int      @id @default(autoincrement())
+  tenantId  String   @map("unit_id") @db.Uuid
+  legacyId  Int?     @map("legacy_id")
+  ncm       String   @db.VarChar(8)
+  rate      Decimal  @map("aliquota") @db.Decimal(9, 4)
+  reduction Decimal  @default(0) @map("reducao") @db.Decimal(9, 4)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, ncm])
+  @@map("credito_ncm")
+}
+
+model TaxRule {
+  id             Int              @id @default(autoincrement())
+  tenantId       String           @map("unit_id") @db.Uuid
+  legacyId       Int?             @map("legacy_id")
+  name           String           @map("nome")
+  simulationRate Decimal          @default(0) @map("aliquota_simulacao") @db.Decimal(9, 4)
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  itemTaxes      InvoiceItemTax[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, name])
+  @@map("tributacao")
+}
+
+model DifalRule {
+  id           Int      @id @default(autoincrement())
+  tenantId     String   @map("unit_id") @db.Uuid
+  legacyId     Int?     @map("legacy_id")
+  state        String   @map("estado") @db.VarChar(2)
+  internalRate Decimal  @map("aliquota_interna") @db.Decimal(9, 4)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, state])
+  @@map("tributacao_difal")
+}
+
+model InstallmentFee {
+  id           Int      @id @default(autoincrement())
+  tenantId     String   @map("unit_id") @db.Uuid
+  legacyId     Int?     @map("legacy_id")
+  installments Int      @map("parcela")
+  rate         Decimal  @map("aliquota") @db.Decimal(9, 4)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, installments])
+  @@map("taxa_parcelamento")
+}
+
+model InvoiceItemCost {
+  id            Int         @id @default(autoincrement())
+  tenantId      String      @map("unit_id") @db.Uuid
+  invoiceItemId Int         @map("nfe_item_id")
+  fixedCostId   Int?        @map("custo_fixo_id")
+  name          String?     @map("nome")
+  rate          Decimal?    @map("aliquota") @db.Decimal(9, 4)
+  value         Decimal     @map("valor") @db.Decimal(18, 4)
+  invoiceItem   InvoiceItem @relation(fields: [invoiceItemId], references: [id], onDelete: Cascade)
+  fixedCost     FixedCost?  @relation(fields: [fixedCostId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, invoiceItemId])
+  @@map("custo_item")
+}
+
+model InvoiceItemTax {
+  id            Int         @id @default(autoincrement())
+  tenantId      String      @map("unit_id") @db.Uuid
+  invoiceItemId Int         @map("nfe_item_id")
+  taxRuleId     Int?        @map("tributacao_id")
+  name          String?     @map("nome")
+  cst           String?
+  baseValue     Decimal     @default(0) @map("valor_base") @db.Decimal(18, 4)
+  reduction     Decimal     @default(0) @map("reducao") @db.Decimal(9, 4)
+  rate          Decimal     @default(0) @map("aliquota") @db.Decimal(9, 4)
+  value         Decimal     @default(0) @map("valor") @db.Decimal(18, 4)
+  invoiceItem   InvoiceItem @relation(fields: [invoiceItemId], references: [id], onDelete: Cascade)
+  taxRule       TaxRule?    @relation(fields: [taxRuleId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, invoiceItemId])
+  @@map("tributacao_item")
+}
+
+model InvoiceItemFee {
+  id            Int         @id @default(autoincrement())
+  tenantId      String      @map("unit_id") @db.Uuid
+  invoiceItemId Int         @map("nfe_item_id")
+  fixedCostId   Int?        @map("custo_fixo_id")
+  name          String?     @map("nome")
+  rate          Decimal?    @map("aliquota") @db.Decimal(9, 4)
+  value         Decimal     @map("valor") @db.Decimal(18, 4)
+  invoiceItem   InvoiceItem @relation(fields: [invoiceItemId], references: [id], onDelete: Cascade)
+  fixedCost     FixedCost?  @relation(fields: [fixedCostId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, invoiceItemId])
+  @@map("taxa_item")
+}
+
+model InvoiceItemCredit {
+  id            Int         @id @default(autoincrement())
+  tenantId      String      @map("unit_id") @db.Uuid
+  invoiceItemId Int         @map("nfe_item_id")
+  fixedCostId   Int?        @map("custo_fixo_id")
+  name          String?     @map("nome")
+  rate          Decimal?    @map("aliquota") @db.Decimal(9, 4)
+  value         Decimal     @map("valor") @db.Decimal(18, 4)
+  invoiceItem   InvoiceItem @relation(fields: [invoiceItemId], references: [id], onDelete: Cascade)
+  fixedCost     FixedCost?  @relation(fields: [fixedCostId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, invoiceItemId])
+  @@map("credito_item")
+}
+
+model SatisfactionConfig {
+  id         Int      @id @default(autoincrement())
+  tenantId   String   @map("unit_id") @db.Uuid
+  enabled    Boolean  @default(false) @map("habilitar")
+  delayDays  Int      @default(0) @map("tempo_dia_env")
+  delayHours Int?     @map("tempo_hora_env")
+  message    String?  @map("msg")
+  link       String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId])
+  @@map("pesquisa_satisfacao")
+}
+
+model SatisfactionDispatch {
+  id           Int           @id @default(autoincrement())
+  tenantId     String        @map("tenant_id") @db.Uuid
+  invoiceId    Int           @map("invoice_id")
+  contactId    Int?          @map("contact_id")
+  status       MessageStatus @default(pending)
+  scheduledAt  DateTime      @map("scheduled_at") @db.Timestamptz(3)
+  sentAt       DateTime?     @map("sent_at") @db.Timestamptz(3)
+  errorMessage String?       @map("error_message")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  invoice      Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([invoiceId])
+  @@index([tenantId, status, scheduledAt])
+  @@map("satisfaction_dispatch")
+}
+
+model OperationalSchedule {
+  id        Int      @id @default(autoincrement())
+  tenantId  String   @map("tenant_id") @db.Uuid
+  jobType   String   @map("job_type")
+  name      String
+  enabled   Boolean  @default(true)
+  hours     Int[]
+  timezone  String   @default("America/Sao_Paulo")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, jobType])
+  @@index([enabled, jobType])
+  @@map("operational_schedule")
+}
+
+model NfeSyncPolicy {
+  id                        String   @id @default(uuid()) @db.Uuid
+  tenantId                  String   @unique @map("tenant_id") @db.Uuid
+  enabled                   Boolean  @default(true)
+  allowedStatuses           Int[]    @default([5, 6]) @map("allowed_statuses")
+  allowedDirections         Int[]    @default([1]) @map("allowed_directions")
+  requireSaleNature         Boolean  @default(true) @map("require_sale_nature")
+  excludeReturnNature       Boolean  @default(true) @map("exclude_return_nature")
+  includedNatureIds         String[] @default([]) @map("included_nature_ids")
+  excludedNatureIds         String[] @default([]) @map("excluded_nature_ids")
+  includedCustomerIds       String[] @default([]) @map("included_customer_ids")
+  excludedCustomerIds       String[] @default([]) @map("excluded_customer_ids")
+  includedCustomerDocuments String[] @default([]) @map("included_customer_documents")
+  excludedCustomerDocuments String[] @default([]) @map("excluded_customer_documents")
+  includedCustomerTerms     String[] @default([]) @map("included_customer_terms")
+  excludedCustomerTerms     String[] @default(["ebazar"]) @map("excluded_customer_terms")
+  includedSalesChannelIds   String[] @default([]) @map("included_sales_channel_ids")
+  excludedSalesChannelIds   String[] @default([]) @map("excluded_sales_channel_ids")
+  includedSellerIds         String[] @default([]) @map("included_seller_ids")
+  excludedSellerIds         String[] @default([]) @map("excluded_seller_ids")
+  includedCfops             String[] @default([]) @map("included_cfops")
+  excludedCfops             String[] @default([]) @map("excluded_cfops")
+  includedSkus              String[] @default([]) @map("included_skus")
+  excludedSkus              String[] @default([]) @map("excluded_skus")
+  includedNcms              String[] @default([]) @map("included_ncms")
+  excludedNcms              String[] @default([]) @map("excluded_ncms")
+  minimumTotal              Decimal? @map("minimum_total") @db.Decimal(18, 4)
+  maximumTotal              Decimal? @map("maximum_total") @db.Decimal(18, 4)
+  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant                    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("nfe_sync_policy")
+}
+
+model OperationalLog {
+  id            BigInt   @id @default(autoincrement())
+  tenantId      String   @map("tenant_id") @db.Uuid
+  jobType       String   @map("job_type")
+  operation     String
+  status        String
+  message       String
+  details       Json     @default("{}")
+  correlationId String?  @map("correlation_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, jobType, createdAt])
+  @@map("operational_log")
+}
+
+model Goal {
+  id          Int          @id @default(autoincrement())
+  tenantId    String       @map("unit_id") @db.Uuid
+  legacyId    Int?         @map("legacy_id")
+  status      GoalStatus   @default(open)
+  competence  String       @map("mes_ano") @db.VarChar(7)
+  startsAt    DateTime     @map("data_inicial") @db.Timestamptz(3)
+  endsAt      DateTime     @map("data_final") @db.Timestamptz(3)
+  completedAt DateTime?    @map("completed_at") @db.Timestamptz(3)
+  cancelledAt DateTime?    @map("cancelled_at") @db.Timestamptz(3)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  sellers     GoalSeller[]
+  sectors     GoalSector[]
+  costs       GoalCost[]
+
+  @@unique([tenantId, legacyId])
+  @@unique([tenantId, competence])
+  @@index([tenantId, status, endsAt])
+  @@map("meta")
+}
+
+model GoalSeller {
+  id             Int      @id @default(autoincrement())
+  goalId         Int      @map("meta_id")
+  sellerId       Int      @map("vendedores_id")
+  targetValue    Decimal  @map("valor_meta") @db.Decimal(18, 4)
+  commissionType String?  @map("tipo_comissao") @db.VarChar(1)
+  commission     Decimal? @map("comissao") @db.Decimal(9, 4)
+  goal           Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  seller         Seller   @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+
+  @@unique([goalId, sellerId])
+  @@index([sellerId])
+  @@map("meta_vendedores")
+}
+
+model GoalSector {
+  id             Int      @id @default(autoincrement())
+  goalId         Int      @map("meta_id")
+  sectorId       Int      @map("setor_id")
+  targetValue    Decimal  @map("valor_meta") @db.Decimal(18, 4)
+  commissionType String?  @map("tipo_comissao") @db.VarChar(1)
+  commission     Decimal? @map("comissao") @db.Decimal(9, 4)
+  goal           Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  sector         Sector   @relation(fields: [sectorId], references: [id], onDelete: Restrict)
+
+  @@unique([goalId, sectorId])
+  @@index([sectorId])
+  @@map("meta_setor")
+}
+
+model GoalCost {
+  id          Int     @id @default(autoincrement())
+  goalId      Int     @map("meta_id")
+  description String?
+  value       Decimal @map("valor_custo") @db.Decimal(18, 4)
+  goal        Goal    @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@map("meta_custo")
+}
+
+model LegacyImportRun {
+  id                String       @id @default(uuid()) @db.Uuid
+  tenantId          String?      @map("tenant_id") @db.Uuid
+  status            ImportStatus @default(pending)
+  sourceFingerprint String?      @map("source_fingerprint")
+  startedAt         DateTime?    @map("started_at") @db.Timestamptz(3)
+  finishedAt        DateTime?    @map("finished_at") @db.Timestamptz(3)
+  checkpoints       Json         @default("{}")
+  statistics        Json         @default("{}")
+  errorMessage      String?      @map("error_message")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant            Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("legacy_import_run")
+}
+
+model LegacyEntityMapping {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  entityType String   @map("entity_type")
+  legacyId   String   @map("legacy_id")
+  modernId   String   @map("modern_id") @db.Uuid
+  sourceHash String?  @map("source_hash")
+  importedAt DateTime @default(now()) @map("imported_at") @db.Timestamptz(3)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, entityType, legacyId])
+  @@unique([tenantId, entityType, modernId])
+  @@index([entityType, legacyId])
+  @@map("legacy_entity_mapping")
 }

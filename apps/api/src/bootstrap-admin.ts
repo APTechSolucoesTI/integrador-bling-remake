@@ -1,5 +1,6 @@
 import { createPrismaClient } from "@integrador/db";
 import { hashPassword } from "@integrador/domain";
+import { ALL_MODULE_PERMISSIONS } from "@integrador/contracts";
 
 interface BootstrapConfiguration {
   email: string;
@@ -8,7 +9,7 @@ interface BootstrapConfiguration {
   tenantName: string;
   tenantSlug: string;
   legacyUnitId: number | null;
-  legacyUserId: number;
+  legacyUserId: number | null;
 }
 
 const databaseUrl = required("DATABASE_URL");
@@ -62,6 +63,18 @@ try {
         superAdmin: true,
       },
     });
+    const administratorProfile = await transaction.accessProfile.upsert({
+      where: {
+        tenantId_name: { tenantId: tenant.id, name: "Administrador" },
+      },
+      create: {
+        tenantId: tenant.id,
+        name: "Administrador",
+        description: "Acesso completo à empresa, configurações e usuários.",
+        permissions: [...ALL_MODULE_PERMISSIONS],
+      },
+      update: { permissions: [...ALL_MODULE_PERMISSIONS] },
+    });
 
     const membership = await transaction.tenantMembership.findFirst({
       where: { tenantId: tenant.id, userId: user.id },
@@ -69,12 +82,12 @@ try {
     if (membership) {
       await transaction.tenantMembership.update({
         where: {
-          tenantId_legacyUserId: {
+          tenantId_userId: {
             tenantId: tenant.id,
-            legacyUserId: membership.legacyUserId,
+            userId: user.id,
           },
         },
-        data: { role: "owner", active: true },
+        data: { accessProfileId: administratorProfile.id, active: true },
       });
     } else {
       await transaction.tenantMembership.create({
@@ -82,7 +95,7 @@ try {
           tenantId: tenant.id,
           legacyUserId: configuration.legacyUserId,
           userId: user.id,
-          role: "owner",
+          accessProfileId: administratorProfile.id,
         },
       });
     }
@@ -118,7 +131,7 @@ function readConfiguration(): BootstrapConfiguration {
     tenantName: required("APBLING_TENANT_NAME").trim(),
     tenantSlug,
     legacyUnitId: optionalPositiveInteger("APBLING_LEGACY_UNIT_ID"),
-    legacyUserId: optionalInteger("APBLING_LEGACY_USER_ID") ?? -1,
+    legacyUserId: optionalInteger("APBLING_LEGACY_USER_ID"),
   };
 }
 

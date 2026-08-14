@@ -1,19 +1,19 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
-import { Prisma, type DatabaseClient } from "@integrador/db";
+import {
+  decryptSecret,
+  encryptSecret,
+  type DatabaseClient,
+} from "@integrador/db";
 import { DATABASE_CLIENT } from "../database/database.module.js";
 
 type IntegrationKind = "bling" | "mercado_livre";
 
-interface OAuthUnitRow {
-  id: number;
-  name: string;
-  clientId: string | null;
-  clientSecret: string | null;
-}
-
-interface TenantIdRow {
-  id: string;
+interface OAuthContext {
+  credentialId: string;
+  tenantId: string;
+  clientId: string;
+  clientSecret: string;
 }
 
 interface OAuthTokenPayload {
@@ -29,82 +29,15 @@ export class OAuthService {
   ) {}
 
   async completeBling(code: string, state: string): Promise<void> {
-    const unit = await this.blingUnit(state);
-    const token = await this.exchangeBling(unit, code);
-    const expiresAt = Math.floor(Date.now() / 1_000) + token.expiresIn;
-    const correlationId = randomUUID();
-    await this.database.$transaction(async (transaction) => {
-      const locked = await transaction.$queryRaw<OAuthUnitRow[]>(Prisma.sql`
-        SELECT id, name, client_id AS "clientId", client_secret AS "clientSecret"
-        FROM system_unit
-        WHERE id=${unit.id}
-          AND state=${state}
-          AND NULLIF(BTRIM(used_at), '') IS NULL
-        FOR UPDATE
-      `);
-      if (!locked[0])
-        throw new BadRequestException("State do Bling já utilizado");
-      await transaction.$executeRaw(Prisma.sql`
-        INSERT INTO bling_tokens (
-          unit_id, nome_unit_id, access_token, refresh_token, expires_in, updated_at, status
-        ) VALUES (
-          ${unit.id}, ${unit.name}, ${token.accessToken}, ${token.refreshToken}, ${expiresAt}, NOW(), 'S'
-        )
-        ON CONFLICT (unit_id) DO UPDATE SET
-          nome_unit_id=EXCLUDED.nome_unit_id,
-          access_token=EXCLUDED.access_token,
-          refresh_token=EXCLUDED.refresh_token,
-          expires_in=EXCLUDED.expires_in,
-          updated_at=EXCLUDED.updated_at,
-          status='S'
-      `);
-      await transaction.$executeRaw(Prisma.sql`
-        UPDATE system_unit SET used_at=NOW()::text WHERE id=${unit.id} AND state=${state}
-      `);
-      await this.auditConnection(transaction, unit.id, "bling", correlationId);
-    });
+    const context = await this.context("bling", state);
+    const token = await this.exchangeBling(context, code);
+    await this.persist(context, "bling", state, token);
   }
 
   async completeMercadoLivre(code: string, state: string): Promise<void> {
-    const unit = await this.mercadoLivreUnit(state);
-    const token = await this.exchangeMercadoLivre(unit, code);
-    const expiresAt = Math.floor(Date.now() / 1_000) + token.expiresIn;
-    const correlationId = randomUUID();
-    await this.database.$transaction(async (transaction) => {
-      const locked = await transaction.$queryRaw<OAuthUnitRow[]>(Prisma.sql`
-        SELECT id, name, ml_client_id AS "clientId", ml_client_secret AS "clientSecret"
-        FROM system_unit
-        WHERE id=${unit.id}
-          AND ml_state=${state}
-          AND NULLIF(BTRIM(ml_used_at), '') IS NULL
-        FOR UPDATE
-      `);
-      if (!locked[0])
-        throw new BadRequestException("State do Mercado Livre já utilizado");
-      await transaction.$executeRaw(Prisma.sql`
-        INSERT INTO mercadolivre_tokens (
-          unit_id, nome_unit_id, access_token, refresh_token, expires_in, updated_at, status
-        ) VALUES (
-          ${unit.id}, ${unit.name}, ${token.accessToken}, ${token.refreshToken}, ${expiresAt}, NOW(), 'S'
-        )
-        ON CONFLICT (unit_id) DO UPDATE SET
-          nome_unit_id=EXCLUDED.nome_unit_id,
-          access_token=EXCLUDED.access_token,
-          refresh_token=EXCLUDED.refresh_token,
-          expires_in=EXCLUDED.expires_in,
-          updated_at=EXCLUDED.updated_at,
-          status='S'
-      `);
-      await transaction.$executeRaw(Prisma.sql`
-        UPDATE system_unit SET ml_used_at=NOW()::text WHERE id=${unit.id} AND ml_state=${state}
-      `);
-      await this.auditConnection(
-        transaction,
-        unit.id,
-        "mercado_livre",
-        correlationId,
-      );
-    });
+    const context = await this.context("mercado_livre", state);
+    const token = await this.exchangeMercadoLivre(context, code);
+    await this.persist(context, "mercado_livre", state, token);
   }
 
   redirectUrl(kind: IntegrationKind): string {
@@ -120,50 +53,94 @@ export class OAuthService {
     return url.toString();
   }
 
-  private async blingUnit(state: string): Promise<OAuthUnitRow> {
-    const rows = await this.database.$queryRaw<OAuthUnitRow[]>(Prisma.sql`
-      SELECT id, name, client_id AS "clientId", client_secret AS "clientSecret"
-      FROM system_unit
-      WHERE state=${state}
-        AND NULLIF(BTRIM(used_at), '') IS NULL
-      LIMIT 1
-    `);
-    return this.validUnit(rows[0], "Bling");
+  private async context(
+    kind: IntegrationKind,
+    state: string,
+  ): Promise<OAuthContext> {
+    const credential = await this.database.oAuthCredential.findFirst({
+      where: {
+        kind,
+        status: "pending",
+        authorizationStateHash: hashState(state),
+        authorizationExpiresAt: { gt: new Date() },
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        clientIdCiphertext: true,
+        clientSecretCiphertext: true,
+      },
+    });
+    if (!credential)
+      throw new BadRequestException(
+        "State OAuth inválido, expirado ou já utilizado",
+      );
+    const prefix = kind === "bling" ? "BLING" : "MERCADO_LIVRE";
+    const clientId =
+      decode(credential.clientIdCiphertext) ??
+      process.env[`${prefix}_CLIENT_ID`];
+    const clientSecret =
+      decode(credential.clientSecretCiphertext) ??
+      process.env[`${prefix}_CLIENT_SECRET`];
+    if (!clientId || !clientSecret)
+      throw new BadRequestException("Credenciais OAuth não configuradas");
+    return {
+      credentialId: credential.id,
+      tenantId: credential.tenantId,
+      clientId,
+      clientSecret,
+    };
   }
 
-  private async mercadoLivreUnit(state: string): Promise<OAuthUnitRow> {
-    const rows = await this.database.$queryRaw<OAuthUnitRow[]>(Prisma.sql`
-      SELECT id, name, ml_client_id AS "clientId", ml_client_secret AS "clientSecret"
-      FROM system_unit
-      WHERE ml_state=${state}
-        AND NULLIF(BTRIM(ml_used_at), '') IS NULL
-      LIMIT 1
-    `);
-    return this.validUnit(rows[0], "Mercado Livre");
-  }
-
-  private validUnit(
-    unit: OAuthUnitRow | undefined,
-    integration: string,
-  ): OAuthUnitRow {
-    if (!unit)
-      throw new BadRequestException(
-        `State do ${integration} inválido ou expirado`,
-      );
-    if (!unit.clientId || !unit.clientSecret)
-      throw new BadRequestException(
-        `Credenciais do ${integration} não configuradas`,
-      );
-    return unit;
+  private async persist(
+    context: OAuthContext,
+    kind: IntegrationKind,
+    state: string,
+    token: OAuthTokenPayload,
+  ): Promise<void> {
+    const expiresAt = new Date(Date.now() + token.expiresIn * 1_000);
+    await this.database.$transaction(async (transaction) => {
+      const claimed = await transaction.oAuthCredential.updateMany({
+        where: {
+          id: context.credentialId,
+          status: "pending",
+          authorizationStateHash: hashState(state),
+          authorizationExpiresAt: { gt: new Date() },
+        },
+        data: {
+          accessTokenCiphertext: encryptSecret(token.accessToken),
+          refreshTokenCiphertext: encryptSecret(token.refreshToken),
+          accessTokenExpiresAt: expiresAt,
+          authorizationStateHash: null,
+          authorizationExpiresAt: null,
+          connectedAt: new Date(),
+          status: "connected",
+          lastError: null,
+        },
+      });
+      if (claimed.count !== 1)
+        throw new BadRequestException("State OAuth já utilizado");
+      await transaction.auditLog.create({
+        data: {
+          tenantId: context.tenantId,
+          actorUserId: null,
+          action: `${kind}.oauth.connected`,
+          entityType: "integration",
+          entityId: kind,
+          correlationId: randomUUID(),
+          metadata: {},
+        },
+      });
+    });
   }
 
   private async exchangeBling(
-    unit: OAuthUnitRow,
+    context: OAuthContext,
     code: string,
   ): Promise<OAuthTokenPayload> {
-    const basic = Buffer.from(`${unit.clientId}:${unit.clientSecret}`).toString(
-      "base64",
-    );
+    const basic = Buffer.from(
+      `${context.clientId}:${context.clientSecret}`,
+    ).toString("base64");
     const response = await fetch(
       "https://api.bling.com.br/Api/v3/oauth/token",
       {
@@ -182,7 +159,7 @@ export class OAuthService {
   }
 
   private async exchangeMercadoLivre(
-    unit: OAuthUnitRow,
+    context: OAuthContext,
     code: string,
   ): Promise<OAuthTokenPayload> {
     const redirectUri = process.env["MERCADO_LIVRE_REDIRECT_URI"];
@@ -198,8 +175,8 @@ export class OAuthService {
       },
       body: new URLSearchParams({
         grant_type: "authorization_code",
-        client_id: unit.clientId!,
-        client_secret: unit.clientSecret!,
+        client_id: context.clientId,
+        client_secret: context.clientSecret,
         code,
         redirect_uri: redirectUri,
       }),
@@ -235,27 +212,12 @@ export class OAuthService {
           : defaultExpiresIn,
     };
   }
+}
 
-  private async auditConnection(
-    transaction: Prisma.TransactionClient,
-    legacyUnitId: number,
-    kind: IntegrationKind,
-    correlationId: string,
-  ): Promise<void> {
-    const tenants = await transaction.$queryRaw<TenantIdRow[]>(Prisma.sql`
-      SELECT id FROM saas_tenant WHERE legacy_unit_id=${legacyUnitId} LIMIT 1
-    `);
-    if (!tenants[0]) return;
-    await transaction.auditLog.create({
-      data: {
-        tenantId: tenants[0].id,
-        actorUserId: null,
-        action: `${kind}.oauth.connected`,
-        entityType: "integration",
-        entityId: kind,
-        correlationId,
-        metadata: {},
-      },
-    });
-  }
+function hashState(state: string): string {
+  return createHash("sha256").update(state).digest("hex");
+}
+
+function decode(value: Uint8Array | null): string | undefined {
+  return decryptSecret(value) ?? undefined;
 }

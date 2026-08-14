@@ -15,6 +15,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { API_URL } from "../../lib/api";
+import { homeRoute } from "../../lib/home-route";
+import type { SessionResponse } from "@integrador/contracts";
 import styles from "./login.module.css";
 
 export function LoginForm() {
@@ -44,7 +46,8 @@ export function LoginForm() {
         );
         return;
       }
-      router.replace("/app/dashboard");
+      const session = (await response.json()) as SessionResponse;
+      router.replace(homeRoute(session));
       router.refresh();
     } catch {
       setError(

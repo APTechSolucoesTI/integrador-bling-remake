@@ -1,0 +1,545 @@
+.actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.actionSlot {
+  position: relative;
+}
+.iconButton,
+.profileButton {
+  border: 1px solid #dce5e0;
+  background: #fff;
+  cursor: pointer;
+}
+.iconButton {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #40574e;
+  position: relative;
+}
+.iconButton:hover,
+.profileButton:hover {
+  border-color: #b9d2c5;
+  background: #f7fbf9;
+}
+.badge {
+  position: absolute;
+  right: -5px;
+  top: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #d34c45;
+  font-size: 8px;
+  font-weight: 800;
+}
+.profileButton {
+  height: 40px;
+  padding: 3px 10px 3px 4px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1a3228;
+}
+.profileButton > span,
+.profileMenu header > span {
+  width: 31px;
+  height: 31px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #145734;
+  background: #d8f5e2;
+  font-size: 10px;
+  font-weight: 850;
+}
+.profileButton div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+.profileButton strong {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+.profileButton small {
+  color: #71817a;
+  font-size: 8px;
+}
+.notificationMenu,
+.profileMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  border: 1px solid #d9e3de;
+  border-radius: 14px;
+  color: #17251f;
+  background: #fff;
+  box-shadow: 0 22px 55px rgba(23, 51, 40, 0.18);
+  z-index: 80;
+}
+.notificationMenu {
+  width: min(430px, calc(100vw - 24px));
+  overflow: hidden;
+}
+.notificationMenu > header {
+  min-height: 70px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e7ece9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.notificationMenu header span,
+.passwordDialog header span,
+.detailDrawer header span {
+  color: #218252;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+.notificationMenu h2,
+.passwordDialog h2,
+.detailDrawer h2 {
+  margin: 3px 0 0;
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+.notificationMenu header button {
+  border: 0;
+  background: transparent;
+  color: #28704c;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.notificationList {
+  max-height: min(540px, calc(100vh - 130px));
+  overflow-y: auto;
+}
+.notificationItem {
+  width: 100%;
+  padding: 13px 14px;
+  border: 0;
+  border-bottom: 1px solid #edf1ef;
+  background: #fff;
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr) 16px;
+  gap: 9px;
+  text-align: left;
+  cursor: pointer;
+}
+.notificationItem:hover {
+  background: #f7faf8;
+}
+.notificationItem.unread {
+  background: #f2fbf5;
+  box-shadow: inset 3px 0 #39a96c;
+}
+.notificationItem > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.notificationItem strong {
+  font-size: 11px;
+}
+.notificationItem small {
+  color: #607169;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.notificationItem time {
+  color: #87958f;
+  font-size: 8px;
+}
+.notificationItem > svg:last-child {
+  align-self: center;
+  color: #91a099;
+}
+.successIcon {
+  color: #23925a;
+}
+.warningIcon {
+  color: #b87b13;
+}
+.errorIcon {
+  color: #c24a43;
+}
+.empty {
+  padding: 24px;
+  text-align: center;
+  color: #75867e;
+  font-size: 10px;
+}
+.emptyState {
+  min-height: 190px;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #74847d;
+  text-align: center;
+}
+.emptyState svg {
+  color: #3b9965;
+}
+.emptyState strong {
+  color: #2c4339;
+  font-size: 12px;
+}
+.emptyState span {
+  max-width: 260px;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.profileMenu {
+  width: 278px;
+  padding: 10px;
+}
+.profileMenu header {
+  padding: 6px 6px 13px;
+  border-bottom: 1px solid #e7ece9;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.profileMenu header > span {
+  width: 38px;
+  height: 38px;
+}
+.profileMenu header div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.profileMenu header strong {
+  font-size: 12px;
+}
+.profileMenu header small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #6d7e76;
+  font-size: 9px;
+}
+.profileContext {
+  margin: 9px 0;
+  padding: 10px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #246646;
+  background: #f0f8f3;
+}
+.profileContext span {
+  display: flex;
+  flex-direction: column;
+}
+.profileContext small {
+  color: #6e8379;
+  font-size: 8px;
+}
+.profileContext strong {
+  color: #224b37;
+  font-size: 10px;
+}
+.profileMenu > button {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #31473e;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.profileMenu > button:hover {
+  background: #f3f7f5;
+}
+.profileMenu .logoutButton {
+  color: #a53d38;
+}
+.backdrop {
+  position: fixed;
+  inset: 0 auto auto 0;
+  width: var(--app-viewport-width, 100vw);
+  height: var(--app-viewport-height, 100dvh);
+  z-index: 120;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 25, 19, 0.42);
+  backdrop-filter: blur(3px);
+}
+.passwordDialog {
+  width: min(480px, 100%);
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 30px 90px rgba(9, 30, 21, 0.28);
+}
+.passwordDialog > header,
+.detailDrawer > header {
+  padding: 19px 20px;
+  border-bottom: 1px solid #e2e9e5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.passwordDialog header button,
+.detailDrawer header button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #dce4e0;
+  border-radius: 9px;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.passwordDialog form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.passwordDialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #41564d;
+  font-size: 9px;
+  font-weight: 750;
+}
+.passwordDialog input {
+  width: 100%;
+  height: 41px;
+  padding: 0 11px;
+  border: 1px solid #d5dfda;
+  border-radius: 9px;
+  outline: 0;
+  color: #17271f;
+  background: #fff;
+}
+.passwordDialog input:focus {
+  border-color: #4ea978;
+  box-shadow: 0 0 0 3px #dff4e8;
+}
+.passwordDialog label > small {
+  color: #839088;
+  font-size: 8px;
+  font-weight: 500;
+}
+.passwordInput {
+  position: relative;
+}
+.passwordInput input {
+  padding-right: 43px;
+}
+.passwordInput button {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 33px;
+  height: 33px;
+  border: 0;
+  background: transparent;
+  color: #66776f;
+  cursor: pointer;
+}
+.formError {
+  margin: 0;
+  padding: 10px 11px;
+  border-radius: 9px;
+  color: #9f3732;
+  background: #fff0ef;
+  font-size: 9px;
+}
+.passwordDialog form footer,
+.detailDrawer footer {
+  padding-top: 4px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.passwordDialog form footer button,
+.passwordSuccess button,
+.detailDrawer footer button,
+.detailDrawer footer a {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid #d6e0db;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #34483f;
+  background: #fff;
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.passwordDialog form footer button[type="submit"],
+.passwordSuccess button,
+.detailDrawer footer a {
+  border-color: #174e36;
+  color: #fff;
+  background: #174e36;
+}
+.passwordSuccess {
+  min-height: 280px;
+  padding: 35px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.passwordSuccess svg {
+  color: #26945b;
+}
+.passwordSuccess h3 {
+  margin: 12px 0 4px;
+}
+.passwordSuccess p {
+  margin: 0 0 19px;
+  color: #6d7c75;
+  font-size: 10px;
+}
+.detailDrawer {
+  width: min(560px, 100%);
+  height: 100%;
+  margin-left: auto;
+  border-radius: 17px 0 0 17px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  box-shadow: -25px 0 70px rgba(8, 30, 21, 0.22);
+}
+.backdrop:has(.detailDrawer) {
+  padding: 0;
+  justify-content: flex-end;
+}
+.detailDrawer > header {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 34px;
+}
+.detailDrawer header time {
+  color: #78877f;
+  font-size: 9px;
+}
+.detailBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px;
+}
+.detailBody > p {
+  margin: 0 0 18px;
+  padding: 13px;
+  border-radius: 10px;
+  color: #355045;
+  background: #f2f8f4;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.detailBody dl {
+  margin: 0;
+  border: 1px solid #e0e8e4;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.detailBody dl div {
+  min-height: 48px;
+  padding: 10px 13px;
+  border-bottom: 1px solid #e8eeeb;
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) 1.4fr;
+  align-items: center;
+  gap: 15px;
+}
+.detailBody dl div:last-child {
+  border-bottom: 0;
+}
+.detailBody dt {
+  color: #708077;
+  font-size: 9px;
+}
+.detailBody dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #213a2f;
+  font-size: 10px;
+  font-weight: 750;
+  text-align: right;
+}
+.noDetail {
+  padding: 18px;
+  border: 1px dashed #cfdbd5;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #74847d;
+  font-size: 10px;
+}
+.detailDrawer footer {
+  padding: 15px 20px;
+  border-top: 1px solid #e2e9e5;
+}
+@media (max-width: 720px) {
+  .profileButton div {
+    display: none;
+  }
+  .profileButton {
+    width: 38px;
+    padding: 3px;
+  }
+  .notificationMenu {
+    position: fixed;
+    top: 60px;
+    right: 12px;
+  }
+  .detailDrawer {
+    border-radius: 0;
+  }
+  .detailBody dl div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .detailBody dd {
+    text-align: left;
+  }
+}
