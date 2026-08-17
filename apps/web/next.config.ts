@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/backend/:path*",
-        destination: "https://apiapbling.aptechinfo.com.br:75/:path*",
+        destination: "http://apbling-frontend-oxmtt4:3001/:path*",
       },
     ];
   },
