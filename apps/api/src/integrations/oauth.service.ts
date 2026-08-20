@@ -75,13 +75,16 @@ export class OAuthService {
       throw new BadRequestException(
         "State OAuth inválido, expirado ou já utilizado",
       );
-    const prefix = kind === "bling" ? "BLING" : "MERCADO_LIVRE";
     const clientId =
       decode(credential.clientIdCiphertext) ??
-      process.env[`${prefix}_CLIENT_ID`];
+      (kind === "mercado_livre"
+        ? process.env["MERCADO_LIVRE_CLIENT_ID"]
+        : undefined);
     const clientSecret =
       decode(credential.clientSecretCiphertext) ??
-      process.env[`${prefix}_CLIENT_SECRET`];
+      (kind === "mercado_livre"
+        ? process.env["MERCADO_LIVRE_CLIENT_SECRET"]
+        : undefined);
     if (!clientId || !clientSecret)
       throw new BadRequestException("Credenciais OAuth não configuradas");
     return {

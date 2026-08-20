@@ -340,7 +340,7 @@
 }
 .settingsGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   align-items: start;
 }
@@ -402,6 +402,120 @@
   margin-top: 13px;
   display: grid;
   gap: 8px;
+}
+.credentialStatus {
+  min-height: 34px;
+  margin-top: 13px;
+  padding: 8px 9px;
+  border: 1px solid #e2e8e4;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #f8faf9;
+}
+.credentialStatus span {
+  font-size: 8px;
+  font-weight: 750;
+}
+.credentialStatus small {
+  color: #78877f;
+  font-size: 7px;
+}
+.statusOk {
+  color: #227949;
+}
+.statusWarning {
+  color: #a66b1b;
+}
+.credentialHelp,
+.credentialError {
+  margin: 9px 0 0;
+  font-size: 7px;
+  line-height: 1.5;
+}
+.credentialHelp {
+  color: #718078;
+}
+.credentialError {
+  padding: 8px 9px;
+  border: 1px solid #f1c7c7;
+  border-radius: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #a54343;
+  background: #fff7f7;
+}
+.credentialError svg {
+  flex: 0 0 auto;
+}
+.automationToggle {
+  min-height: 48px;
+  margin-top: 10px;
+  padding: 8px 9px;
+  border: 1px solid #e1e8e4;
+  border-radius: 9px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  background: #f8faf9;
+  cursor: pointer;
+}
+.automationToggle input {
+  width: 1px;
+  height: 1px;
+  position: absolute;
+  opacity: 0;
+}
+.automationToggle > span {
+  width: 31px;
+  height: 18px;
+  padding: 2px;
+  border-radius: 99px;
+  display: flex;
+  align-items: center;
+  background: #cbd5d0;
+  transition: background 140ms ease;
+}
+.automationToggle > span::after {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px #193b2e30;
+  content: "";
+  transition: transform 140ms ease;
+}
+.automationToggle input:checked + span {
+  background: #2aa55d;
+}
+.automationToggle input:checked + span::after {
+  transform: translateX(13px);
+}
+.automationToggle input:focus-visible + span {
+  outline: 2px solid #50b878;
+  outline-offset: 2px;
+}
+.automationToggle:has(input:disabled) {
+  cursor: default;
+  opacity: 0.58;
+}
+.automationToggle div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.automationToggle strong {
+  color: #30473c;
+  font-size: 8px;
+}
+.automationToggle small {
+  color: #7b8982;
+  font-size: 7px;
+  line-height: 1.35;
 }
 .configForm label {
   display: grid;
@@ -470,6 +584,26 @@
   font-weight: 700;
 }
 .saveButton:disabled {
+  opacity: 0.45;
+}
+.secondaryButton {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 12px;
+  border: 1px solid #bcd8c8;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #236e45;
+  background: #f1faf4;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 700;
+}
+.secondaryButton:disabled {
+  cursor: default;
   opacity: 0.45;
 }
 .settingsActions {

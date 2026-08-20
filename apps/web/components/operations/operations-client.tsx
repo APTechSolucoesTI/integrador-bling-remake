@@ -18,6 +18,7 @@ import {
   FileText,
   Gauge,
   Goal,
+  KeyRound,
   LoaderCircle,
   LogOut,
   Menu,
@@ -568,6 +569,7 @@ export function OperationsClient() {
               testingApchat={testingApchat}
               onSave={saveConfiguration}
               onTestApchat={enqueueApchatTest}
+              onAuthorizeBling={() => authorize("bling")}
             />
           ) : null}
 
@@ -927,6 +929,7 @@ function OperationalSettings({
   testingApchat,
   onSave,
   onTestApchat,
+  onAuthorizeBling,
 }: {
   overview: OperationsOverview;
   canEdit: boolean;
@@ -934,7 +937,15 @@ function OperationalSettings({
   testingApchat: boolean;
   onSave: (input: OperationsSettingsUpdate) => Promise<void>;
   onTestApchat: (recipient: string) => Promise<void>;
+  onAuthorizeBling: () => Promise<void>;
 }) {
+  const [bling, setBling] = useState({ clientId: "", clientSecret: "" });
+  const [scheduleEnabled, setScheduleEnabled] = useState(
+    overview.configuration.schedule.enabled,
+  );
+  const [autoDeliver, setAutoDeliver] = useState(
+    overview.configuration.schedule.autoDeliver,
+  );
   const [hours, setHours] = useState(overview.configuration.schedule.hours);
   const [apchat, setApchat] = useState({
     ...overview.configuration.apchat,
@@ -944,6 +955,9 @@ function OperationalSettings({
     ...overview.configuration.satisfaction,
   });
   useEffect(() => {
+    setBling({ clientId: "", clientSecret: "" });
+    setScheduleEnabled(overview.configuration.schedule.enabled);
+    setAutoDeliver(overview.configuration.schedule.autoDeliver);
     setHours(overview.configuration.schedule.hours);
     setApchat({ ...overview.configuration.apchat, token: "" });
     setSurvey({ ...overview.configuration.satisfaction });
@@ -961,6 +975,122 @@ function OperationalSettings({
         <article className={styles.settingsCard}>
           <header>
             <span>
+              <KeyRound size={18} />
+            </span>
+            <div>
+              <h3>Aplicativo Bling desta empresa</h3>
+              <p>
+                Client ID e Client Secret exclusivos da unidade, armazenados com
+                criptografia.
+              </p>
+            </div>
+          </header>
+          <div className={styles.credentialStatus}>
+            <span
+              className={
+                overview.configuration.bling.credentialsConfigured
+                  ? styles.statusOk
+                  : styles.statusWarning
+              }
+            >
+              {overview.configuration.bling.credentialsConfigured
+                ? "Credenciais configuradas"
+                : "Configuração necessária"}
+            </span>
+            {overview.configuration.bling.clientIdHint ? (
+              <small>
+                Client ID {overview.configuration.bling.clientIdHint}
+              </small>
+            ) : null}
+          </div>
+          <div className={styles.configForm}>
+            <label>
+              <span>Novo Client ID</span>
+              <input
+                autoComplete="off"
+                disabled={!canEdit}
+                type="password"
+                value={bling.clientId}
+                onChange={(event) =>
+                  setBling({ ...bling, clientId: event.target.value })
+                }
+                placeholder={
+                  overview.configuration.bling.credentialsConfigured
+                    ? "Manter Client ID atual"
+                    : "Informe o Client ID"
+                }
+              />
+            </label>
+            <label>
+              <span>Novo Client Secret</span>
+              <input
+                autoComplete="new-password"
+                disabled={!canEdit}
+                type="password"
+                value={bling.clientSecret}
+                onChange={(event) =>
+                  setBling({ ...bling, clientSecret: event.target.value })
+                }
+                placeholder={
+                  overview.configuration.bling.credentialsConfigured
+                    ? "Manter Client Secret atual"
+                    : "Informe o Client Secret"
+                }
+              />
+            </label>
+          </div>
+          {overview.configuration.bling.lastError ? (
+            <div className={styles.credentialError}>
+              <TriangleAlert size={14} />
+              <span>{overview.configuration.bling.lastError}</span>
+            </div>
+          ) : overview.configuration.bling.connected ? (
+            <p className={styles.credentialHelp}>
+              Token conectado
+              {overview.configuration.bling.expiresAt
+                ? ` · renovação automática antes de ${formatDateTime(overview.configuration.bling.expiresAt)}`
+                : ""}
+            </p>
+          ) : (
+            <p className={styles.credentialHelp}>
+              Após salvar, clique em Autorizar para gerar tokens próprios desta
+              empresa.
+            </p>
+          )}
+          {canEdit ? (
+            <div className={styles.settingsActions}>
+              <button
+                className={styles.saveButton}
+                type="button"
+                disabled={saving || (!bling.clientId && !bling.clientSecret)}
+                onClick={() =>
+                  void onSave({
+                    kind: "blingCredentials",
+                    ...(bling.clientId ? { clientId: bling.clientId } : {}),
+                    ...(bling.clientSecret
+                      ? { clientSecret: bling.clientSecret }
+                      : {}),
+                  })
+                }
+              >
+                <Save size={13} /> Salvar credenciais
+              </button>
+              <button
+                className={styles.secondaryButton}
+                type="button"
+                disabled={
+                  saving || !overview.configuration.bling.credentialsConfigured
+                }
+                onClick={() => void onAuthorizeBling()}
+              >
+                <Zap size={13} /> Autorizar Bling
+              </button>
+            </div>
+          ) : null}
+        </article>
+        <article className={styles.settingsCard}>
+          <header>
+            <span>
               <CalendarClock size={18} />
             </span>
             <div>
@@ -968,13 +1098,27 @@ function OperationalSettings({
               <p>Horas em que o dispatcher legado agenda a sincronização.</p>
             </div>
           </header>
+          <AutomationToggle
+            checked={scheduleEnabled}
+            disabled={!canEdit}
+            title="Habilitar sincronizações automáticas"
+            description="Desative para pausar todos os horários sem apagar a agenda."
+            onChange={setScheduleEnabled}
+          />
+          <AutomationToggle
+            checked={autoDeliver}
+            disabled={!canEdit || !scheduleEnabled}
+            title="Enviar NF-e automaticamente"
+            description="Após sincronizar, envia somente notas prontas pelo APChat habilitado."
+            onChange={setAutoDeliver}
+          />
           <div className={styles.hours}>
             {Array.from({ length: 24 }, (_, hour) => (
               <button
                 className={hours.includes(hour) ? styles.hourActive : ""}
                 type="button"
                 key={hour}
-                disabled={!canEdit}
+                disabled={!canEdit || !scheduleEnabled}
                 onClick={() =>
                   setHours((current) =>
                     current.includes(hour)
@@ -992,7 +1136,14 @@ function OperationalSettings({
               className={styles.saveButton}
               type="button"
               disabled={saving}
-              onClick={() => void onSave({ kind: "schedule", hours })}
+              onClick={() =>
+                void onSave({
+                  kind: "schedule",
+                  enabled: scheduleEnabled,
+                  autoDeliver,
+                  hours,
+                })
+              }
             >
               <Save size={13} /> Salvar horários
             </button>
@@ -1010,6 +1161,13 @@ function OperationalSettings({
               </p>
             </div>
           </header>
+          <AutomationToggle
+            checked={apchat.enabled}
+            disabled={!canEdit}
+            title="Habilitar canal APChat"
+            description="Desative para bloquear envios sem apagar credenciais e números."
+            onChange={(enabled) => setApchat({ ...apchat, enabled })}
+          />
           <div className={styles.configForm}>
             <label>
               <span>UUID</span>
@@ -1088,6 +1246,7 @@ function OperationalSettings({
                 onClick={() =>
                   void onSave({
                     kind: "apchat",
+                    enabled: apchat.enabled,
                     uuid: apchat.uuid!,
                     token: apchat.token || undefined,
                     sendNumber: apchat.sendNumber || null,
@@ -1132,17 +1291,13 @@ function OperationalSettings({
             </div>
           </header>
           <div className={styles.configForm}>
-            <label className={styles.checkLabel}>
-              <input
-                disabled={!canEdit}
-                type="checkbox"
-                checked={survey.enabled}
-                onChange={(event) =>
-                  setSurvey({ ...survey, enabled: event.target.checked })
-                }
-              />
-              Habilitar envio automático
-            </label>
+            <AutomationToggle
+              checked={survey.enabled}
+              disabled={!canEdit || !apchat.enabled}
+              title="Habilitar pesquisa automática"
+              description="Executa somente com APChat habilitado e NF-e enviada."
+              onChange={(enabled) => setSurvey({ ...survey, enabled })}
+            />
             <div className={styles.twoFields}>
               <label>
                 <span>Dias após envio</span>
@@ -1230,5 +1385,35 @@ function OperationalSettings({
         </article>
       </div>
     </section>
+  );
+}
+
+function AutomationToggle({
+  checked,
+  disabled,
+  title,
+  description,
+  onChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  title: string;
+  description: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className={styles.automationToggle}>
+      <input
+        checked={checked}
+        disabled={disabled}
+        type="checkbox"
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span aria-hidden="true" />
+      <div>
+        <strong>{title}</strong>
+        <small>{description}</small>
+      </div>
+    </label>
   );
 }

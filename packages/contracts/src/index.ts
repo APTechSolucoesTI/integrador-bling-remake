@@ -1082,12 +1082,22 @@ export const operationsOverviewSchema = z.object({
   ),
   configuration: z.object({
     authorization: z.object({ bling: z.boolean(), mercadoLivre: z.boolean() }),
+    bling: z.object({
+      credentialsConfigured: z.boolean(),
+      clientIdHint: z.string().nullable(),
+      connected: z.boolean(),
+      expiresAt: z.iso.datetime().nullable(),
+      lastError: z.string().nullable(),
+    }),
     schedule: z.object({
+      enabled: z.boolean(),
+      autoDeliver: z.boolean(),
       hours: z.array(z.number().int().min(0).max(23)),
       description: z.string().nullable(),
     }),
     apchat: z.object({
       configured: z.boolean(),
+      enabled: z.boolean(),
       uuid: z.string().nullable(),
       sendNumber: z.string().nullable(),
       reportNumber: z.string().nullable(),
@@ -1111,10 +1121,24 @@ export const operationsSettingsUpdateSchema = z
   .discriminatedUnion("kind", [
     z.object({
       kind: z.literal("schedule"),
+      enabled: z.boolean(),
+      autoDeliver: z.boolean(),
       hours: z.array(z.number().int().min(0).max(23)).max(24),
     }),
+    z
+      .object({
+        kind: z.literal("blingCredentials"),
+        clientId: z.string().trim().min(1).max(500).optional(),
+        clientSecret: z.string().trim().min(1).max(4000).optional(),
+      })
+      .refine(
+        (value) =>
+          value.clientId !== undefined || value.clientSecret !== undefined,
+        "Informe ao menos uma credencial",
+      ),
     z.object({
       kind: z.literal("apchat"),
+      enabled: z.boolean(),
       uuid: z.string().trim().min(1).max(200),
       token: z.string().trim().min(1).max(4000).optional(),
       sendNumber: z.string().trim().max(20).nullable(),

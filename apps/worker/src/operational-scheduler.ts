@@ -10,6 +10,8 @@ interface ScheduleRow {
   tenantId: string;
   unitId: string;
   hours: number[];
+  autoDeliver: boolean;
+  apchatEnabled: boolean;
   satisfactionEnabled: boolean;
   satisfactionHour: number | null;
 }
@@ -17,6 +19,7 @@ interface ScheduleRow {
 interface ClockParts {
   date: string;
   hour: number;
+  minute: number;
   yesterday: string;
   weekAgo: string;
 }
@@ -47,11 +50,14 @@ export class OperationalScheduler {
     this.#running = true;
     try {
       const clock = saoPauloClock(now);
-      const schedules = await this.database.$queryRaw<ScheduleRow[]>(Prisma.sql`
+      const [schedules, refreshTargets] = await Promise.all([
+        this.database.$queryRaw<ScheduleRow[]>(Prisma.sql`
         SELECT
           tenant.id::text AS "tenantId",
           tenant.id::text AS "unitId",
           config.hours,
+          config.auto_deliver AS "autoDeliver",
+          COALESCE(apchat.enabled, FALSE) AS "apchatEnabled",
           COALESCE(satisfaction.habilitar, FALSE) AS "satisfactionEnabled",
           satisfaction.tempo_hora_env AS "satisfactionHour"
         FROM saas_tenant tenant
@@ -66,9 +72,31 @@ export class OperationalScheduler {
           ORDER BY id
           LIMIT 1
         ) satisfaction ON TRUE
+        LEFT JOIN apchat_config apchat ON apchat.tenant_id = tenant.id
         WHERE tenant.active = TRUE
           AND tenant.demo = FALSE
-      `);
+      `),
+        this.database.oAuthCredential.findMany({
+          where: {
+            kind: "bling",
+            status: "connected",
+            accessTokenExpiresAt: {
+              lte: new Date(now.getTime() + 10 * 60_000),
+            },
+            tenant: { active: true, demo: false },
+          },
+          select: { tenantId: true },
+        }),
+      ]);
+
+      for (const target of refreshTargets) {
+        await this.enqueue(
+          target.tenantId,
+          "bling.refresh-token",
+          `${clock.date}-${clock.hour}-${clock.minute}`,
+          {},
+        );
+      }
 
       for (const schedule of schedules) {
         if (schedule.hours.includes(clock.hour)) {
@@ -79,7 +107,7 @@ export class OperationalScheduler {
             {
               from: clock.yesterday,
               to: clock.date,
-              autoDeliver: true,
+              autoDeliver: schedule.autoDeliver && schedule.apchatEnabled,
             },
           );
         }
@@ -121,6 +149,7 @@ export class OperationalScheduler {
         }
         if (
           schedule.satisfactionEnabled &&
+          schedule.apchatEnabled &&
           schedule.satisfactionHour === clock.hour
         ) {
           await this.enqueue(
@@ -219,6 +248,7 @@ function saoPauloClock(value: Date): ClockParts {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
+    minute: "2-digit",
     hourCycle: "h23",
   }).formatToParts(value);
   const get = (type: Intl.DateTimeFormatPartTypes): string =>
@@ -238,6 +268,7 @@ function saoPauloClock(value: Date): ClockParts {
   return {
     date,
     hour: Number(get("hour")),
+    minute: Number(get("minute")),
     yesterday,
     weekAgo: formatter.format(week),
   };

@@ -442,7 +442,15 @@ export class ProductionIntegrationProcessor {
     }
 
     let delivered = 0;
-    if (input.autoDeliver && localInvoices.length > 0) {
+    const apchatEnabled = input.autoDeliver
+      ? (
+          await this.database.apChatConfig.findUnique({
+            where: { tenantId: context.tenantId },
+            select: { enabled: true },
+          })
+        )?.enabled === true
+      : false;
+    if (input.autoDeliver && apchatEnabled && localInvoices.length > 0) {
       const ready = await this.database.$queryRaw<IdRow[]>(Prisma.sql`
         SELECT id
         FROM nfe
@@ -479,6 +487,12 @@ export class ProductionIntegrationProcessor {
       enriched: localInvoices.length,
       enrichmentFailed,
       delivered,
+      automaticDelivery:
+        input.autoDeliver && !apchatEnabled
+          ? "skipped_apchat_disabled"
+          : input.autoDeliver
+            ? "enabled"
+            : "disabled",
     };
   }
 
@@ -1999,7 +2013,12 @@ class PrismaBlingTokenRepository implements BlingTokenRepository {
         accessTokenCiphertext: encryptSecret(record.accessToken),
         refreshTokenCiphertext: encryptSecret(record.refreshToken),
         accessTokenExpiresAt: new Date(record.expiresAtEpochSeconds * 1_000),
-        status: record.status === "S" ? "connected" : "pending",
+        status:
+          record.status === "S"
+            ? "connected"
+            : record.status === "R"
+              ? "pending"
+              : "disconnected",
       },
     });
   }
@@ -2012,12 +2031,10 @@ class PrismaBlingCredentialProvider implements BlingCredentialProvider {
     const credential = await this.database.oAuthCredential.findUnique({
       where: { tenantId_kind: { tenantId, kind: "bling" } },
     });
-    const clientId =
-      decodeSecret(credential?.clientIdCiphertext ?? null) ??
-      process.env["BLING_CLIENT_ID"];
-    const clientSecret =
-      decodeSecret(credential?.clientSecretCiphertext ?? null) ??
-      process.env["BLING_CLIENT_SECRET"];
+    const clientId = decodeSecret(credential?.clientIdCiphertext ?? null);
+    const clientSecret = decodeSecret(
+      credential?.clientSecretCiphertext ?? null,
+    );
     if (!clientId || !clientSecret)
       throw new BadRequestError("Credenciais OAuth Bling não configuradas");
     return { clientId, clientSecret };
@@ -2143,16 +2160,32 @@ class PrismaBlingRefreshAudit implements BlingRefreshAudit {
     outcome: "success" | "revoked" | "transient_failure" | "not_found";
     code?: string;
   }): Promise<void> {
-    await this.database.auditLog.create({
-      data: {
-        tenantId: event.tenantId,
-        actorUserId: null,
-        action: `bling.refresh.${event.outcome}`,
-        entityType: "integration",
-        entityId: "bling",
-        correlationId: event.correlationId,
-        metadata: event.code ? { code: event.code } : {},
-      },
+    const lastError =
+      event.outcome === "success"
+        ? null
+        : event.outcome === "revoked"
+          ? "Refresh token revogado ou incompatível com as credenciais desta empresa. Reconecte o Bling."
+          : event.outcome === "transient_failure"
+            ? `Falha temporária ao renovar o token${event.code ? ` (${event.code})` : ""}.`
+            : undefined;
+    await this.database.$transaction(async (transaction) => {
+      if (lastError !== undefined) {
+        await transaction.oAuthCredential.updateMany({
+          where: { tenantId: event.tenantId, kind: "bling" },
+          data: { lastError },
+        });
+      }
+      await transaction.auditLog.create({
+        data: {
+          tenantId: event.tenantId,
+          actorUserId: null,
+          action: `bling.refresh.${event.outcome}`,
+          entityType: "integration",
+          entityId: "bling",
+          correlationId: event.correlationId,
+          metadata: event.code ? { code: event.code } : {},
+        },
+      });
     });
   }
 }

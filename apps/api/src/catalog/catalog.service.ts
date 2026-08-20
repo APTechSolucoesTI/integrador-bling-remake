@@ -1023,6 +1023,7 @@ export class CatalogService {
     const apchat = apChatRows
       ? {
           configured: apChatRows.tokenCiphertext !== null,
+          enabled: apChatRows.enabled,
           messagesEnabled: apChatRows.sendMessages,
           uuid: decryptSecret(apChatRows.workspaceIdCiphertext),
           sendNumber: apChatRows.invoicePhone,
@@ -1041,9 +1042,9 @@ export class CatalogService {
         }
       : undefined;
     const authorization = {
-      bling:
-        authorizationRows.some((row) => row.kind === "bling") ||
-        Boolean(process.env["BLING_CLIENT_ID"]),
+      bling: Boolean(
+        blingRows?.clientIdCiphertext && blingRows.clientSecretCiphertext,
+      ),
       mercadoLivre:
         authorizationRows.some((row) => row.kind === "mercado_livre") ||
         Boolean(process.env["MERCADO_LIVRE_CLIENT_ID"]),
@@ -1062,14 +1063,11 @@ export class CatalogService {
         {
           kind: "apchat",
           configured: apchat?.configured ?? false,
-          enabled:
-            configMap.get("apchat")?.enabled ??
-            apchat?.messagesEnabled ??
-            false,
+          enabled: configMap.get("apchat")?.enabled ?? apchat?.enabled ?? false,
           status: !apchat?.configured
             ? "Não configurado"
-            : apchat.messagesEnabled
-              ? "Mensagens habilitadas"
+            : apchat.enabled
+              ? "Canal habilitado"
               : "Mensagens pausadas",
           updatedAt: null,
           detail: apchat?.configured ? "Canal APChat registrado" : null,
@@ -1115,12 +1113,26 @@ export class CatalogService {
             (authorization?.mercadoLivre ?? false) &&
             this.isHttpUrl(process.env["MERCADO_LIVRE_REDIRECT_URI"]),
         },
+        bling: {
+          credentialsConfigured: authorization.bling,
+          clientIdHint: credentialHint(
+            decryptSecret(blingRows?.clientIdCiphertext ?? null),
+          ),
+          connected:
+            blingRows?.status === "connected" &&
+            blingRows.accessTokenCiphertext !== null,
+          expiresAt: blingRows?.accessTokenExpiresAt?.toISOString() ?? null,
+          lastError: blingRows?.lastError ?? null,
+        },
         schedule: {
+          enabled: schedule?.enabled ?? false,
+          autoDeliver: schedule?.autoDeliver ?? false,
           hours: schedule?.hours ?? [],
           description: schedule?.name ?? null,
         },
         apchat: {
           configured: apchat?.configured ?? false,
+          enabled: apchat?.enabled ?? false,
           uuid: apchat?.uuid ?? null,
           sendNumber: apchat?.sendNumber ?? null,
           reportNumber: apchat?.reportNumber ?? null,
@@ -1211,7 +1223,10 @@ export class CatalogService {
     const clientId =
       (existing?.clientIdCiphertext
         ? decryptSecret(existing.clientIdCiphertext)
-        : undefined) ?? process.env[`${prefix}_CLIENT_ID`];
+        : undefined) ??
+      (kind === "mercado_livre"
+        ? process.env[`${prefix}_CLIENT_ID`]
+        : undefined);
     const state = randomUUID();
     await this.database.oAuthCredential.upsert({
       where: { tenantId_kind: { tenantId, kind } },
@@ -1363,9 +1378,63 @@ export class CatalogService {
             tenantId: unitId,
             jobType: "bling.sync-nfe",
             name: description,
+            enabled: input.enabled,
+            autoDeliver: input.autoDeliver,
             hours: input.hours,
           },
-          update: { name: description, hours: input.hours, enabled: true },
+          update: {
+            name: description,
+            hours: input.hours,
+            enabled: input.enabled,
+            autoDeliver: input.autoDeliver,
+          },
+        });
+      }
+      if (input.kind === "blingCredentials") {
+        const current = await transaction.oAuthCredential.findUnique({
+          where: { tenantId_kind: { tenantId: unitId, kind: "bling" } },
+        });
+        const currentClientId = decryptSecret(
+          current?.clientIdCiphertext ?? null,
+        );
+        const currentClientSecret = decryptSecret(
+          current?.clientSecretCiphertext ?? null,
+        );
+        const clientId = input.clientId ?? currentClientId;
+        const clientSecret = input.clientSecret ?? currentClientSecret;
+        if (!clientId || !clientSecret)
+          throw new BadRequestException(
+            "Informe Client ID e Client Secret na primeira configuração",
+          );
+        const credentialsChanged =
+          clientId !== currentClientId || clientSecret !== currentClientSecret;
+        const reset = credentialsChanged
+          ? {
+              status: "disconnected" as const,
+              accessTokenCiphertext: null,
+              refreshTokenCiphertext: null,
+              accessTokenExpiresAt: null,
+              connectedAt: null,
+              authorizationStateHash: null,
+              authorizationExpiresAt: null,
+              lastError:
+                "Credenciais atualizadas. Autorize novamente a integração Bling.",
+            }
+          : {};
+        await transaction.oAuthCredential.upsert({
+          where: { tenantId_kind: { tenantId: unitId, kind: "bling" } },
+          create: {
+            tenantId: unitId,
+            kind: "bling",
+            clientIdCiphertext: encryptSecret(clientId),
+            clientSecretCiphertext: encryptSecret(clientSecret),
+            status: "disconnected",
+          },
+          update: {
+            clientIdCiphertext: encryptSecret(clientId),
+            clientSecretCiphertext: encryptSecret(clientSecret),
+            ...reset,
+          },
         });
       }
       if (input.kind === "apchat") {
@@ -1387,7 +1456,7 @@ export class CatalogService {
             reportPhone: input.reportNumber,
             testPhone: input.testNumber,
             sendMessages: input.messagesOpen,
-            enabled: true,
+            enabled: input.enabled,
           },
           update: {
             workspaceIdCiphertext: encryptSecret(input.uuid),
@@ -1396,7 +1465,7 @@ export class CatalogService {
             reportPhone: input.reportNumber,
             testPhone: input.testNumber,
             sendMessages: input.messagesOpen,
-            enabled: true,
+            enabled: input.enabled,
           },
         });
       }
@@ -1438,9 +1507,15 @@ export class CatalogService {
           entityId: String(unitId),
           correlationId: randomUUID(),
           metadata:
-            input.kind === "apchat"
-              ? { kind: input.kind, tokenChanged: input.token !== undefined }
-              : input,
+            input.kind === "blingCredentials"
+              ? {
+                  kind: input.kind,
+                  clientIdChanged: input.clientId !== undefined,
+                  clientSecretChanged: input.clientSecret !== undefined,
+                }
+              : input.kind === "apchat"
+                ? { kind: input.kind, tokenChanged: input.token !== undefined }
+                : input,
         },
       });
     });
@@ -1791,6 +1866,13 @@ function uniquePolicyOptions<T extends { value: string }>(options: T[]): T[] {
     seen.add(value);
     return true;
   });
+}
+
+function credentialHint(value: string | null): string | null {
+  if (!value) return null;
+  const visible = value.slice(-4);
+  const hiddenLength = Math.min(Math.max(value.length - 4, 4), 12);
+  return `${"•".repeat(hiddenLength)}${visible}`;
 }
 
 function goalStatusName(statusId: number): "open" | "completed" | "cancelled" {

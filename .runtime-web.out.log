@@ -1,0 +1,10 @@
+▲ Next.js 16.3.0 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.3.198:3000
+✓ Ready in 979ms
+✓ Running next.config.ts took 67ms
+Creating turbopack project {
+  dir: 'C:\\Projetos\\integrador-bling-remake\\integrador-bling-remake\\apps\\web',
+  testMode: true
+}
+

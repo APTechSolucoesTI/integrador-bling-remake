@@ -235,6 +235,7 @@ export class BlingOAuthHttpGateway implements BlingOAuthGateway {
 function isInvalidGrant(payload: unknown): boolean {
   if (typeof payload !== "object" || payload === null) return false;
   const error = (payload as Record<string, unknown>)["error"];
+  if (error === "invalid_grant") return true;
   return (
     typeof error === "object" &&
     error !== null &&
