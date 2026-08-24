@@ -1,0 +1,118 @@
+Error: connect ETIMEDOUT
+    at Socket.<anonymous> (C:\Projetos\integrador-bling-remake\integrador-bling-remake\node_modules\.pnpm\ioredis@6.0.0_supports-color@8.1.1\node_modules\ioredis\built\Redis.js:196:41)
+    at Object.onceWrapper (node:events:630:28)
+    at Socket.emit (node:events:509:28)
+    at Socket._onTimeout (node:net:611:8)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7) {
+  errorno: 'ETIMEDOUT',
+  code: 'ETIMEDOUT',
+  syscall: 'connect'
+}
+Error: connect ETIMEDOUT
+    at Socket.<anonymous> (C:\Projetos\integrador-bling-remake\integrador-bling-remake\node_modules\.pnpm\ioredis@6.0.0_supports-color@8.1.1\node_modules\ioredis\built\Redis.js:196:41)
+    at Object.onceWrapper (node:events:630:28)
+    at Socket.emit (node:events:509:28)
+    at Socket._onTimeout (node:net:611:8)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7) {
+  errorno: 'ETIMEDOUT',
+  code: 'ETIMEDOUT',
+  syscall: 'connect'
+}
+Error: connect ETIMEDOUT
+    at Socket.<anonymous> (C:\Projetos\integrador-bling-remake\integrador-bling-remake\node_modules\.pnpm\ioredis@6.0.0_supports-color@8.1.1\node_modules\ioredis\built\Redis.js:196:41)
+    at Object.onceWrapper (node:events:630:28)
+    at Socket.emit (node:events:509:28)
+    at Socket._onTimeout (node:net:611:8)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7) {
+  errorno: 'ETIMEDOUT',
+  code: 'ETIMEDOUT',
+  syscall: 'connect'
+}
+Error: connect ETIMEDOUT
+    at Socket.<anonymous> (C:\Projetos\integrador-bling-remake\integrador-bling-remake\node_modules\.pnpm\ioredis@6.0.0_supports-color@8.1.1\node_modules\ioredis\built\Redis.js:196:41)
+    at Object.onceWrapper (node:events:630:28)
+    at Socket.emit (node:events:509:28)
+    at Socket._onTimeout (node:net:611:8)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7) {
+  errorno: 'ETIMEDOUT',
+  code: 'ETIMEDOUT',
+  syscall: 'connect'
+}
+Error: connect ETIMEDOUT
+    at Socket.<anonymous> (C:\Projetos\integrador-bling-remake\integrador-bling-remake\node_modules\.pnpm\ioredis@6.0.0_supports-color@8.1.1\node_modules\ioredis\built\Redis.js:196:41)
+    at Object.onceWrapper (node:events:630:28)
+    at Socket.emit (node:events:509:28)
+    at Socket._onTimeout (node:net:611:8)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7) {
+  errorno: 'ETIMEDOUT',
+  code: 'ETIMEDOUT',
+  syscall: 'connect'
+}
+Error: connect ETIMEDOUT
+    at Socket.<anonymous> (C:\Projetos\integrador-bling-remake\integrador-bling-remake\node_modules\.pnpm\ioredis@6.0.0_supports-color@8.1.1\node_modules\ioredis\built\Redis.js:196:41)
+    at Object.onceWrapper (node:events:630:28)
+    at Socket.emit (node:events:509:28)
+    at Socket._onTimeout (node:net:611:8)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7) {
+  errorno: 'ETIMEDOUT',
+  code: 'ETIMEDOUT',
+  syscall: 'connect'
+}
+Error: connect ETIMEDOUT
+    at Socket.<anonymous> (C:\Projetos\integrador-bling-remake\integrador-bling-remake\node_modules\.pnpm\ioredis@6.0.0_supports-color@8.1.1\node_modules\ioredis\built\Redis.js:196:41)
+    at Object.onceWrapper (node:events:630:28)
+    at Socket.emit (node:events:509:28)
+    at Socket._onTimeout (node:net:611:8)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7) {
+  errorno: 'ETIMEDOUT',
+  code: 'ETIMEDOUT',
+  syscall: 'connect'
+}
+Error: connect ETIMEDOUT
+    at Socket.<anonymous> (C:\Projetos\integrador-bling-remake\integrador-bling-remake\node_modules\.pnpm\ioredis@6.0.0_supports-color@8.1.1\node_modules\ioredis\built\Redis.js:196:41)
+    at Object.onceWrapper (node:events:630:28)
+    at Socket.emit (node:events:509:28)
+    at Socket._onTimeout (node:net:611:8)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7) {
+  errorno: 'ETIMEDOUT',
+  code: 'ETIMEDOUT',
+  syscall: 'connect'
+}
+Error: connect ETIMEDOUT
+    at Socket.<anonymous> (C:\Projetos\integrador-bling-remake\integrador-bling-remake\node_modules\.pnpm\ioredis@6.0.0_supports-color@8.1.1\node_modules\ioredis\built\Redis.js:196:41)
+    at Object.onceWrapper (node:events:630:28)
+    at Socket.emit (node:events:509:28)
+    at Socket._onTimeout (node:net:611:8)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7) {
+  errorno: 'ETIMEDOUT',
+  code: 'ETIMEDOUT',
+  syscall: 'connect'
+}
+Error: connect ETIMEDOUT
+    at Socket.<anonymous> (C:\Projetos\integrador-bling-remake\integrador-bling-remake\node_modules\.pnpm\ioredis@6.0.0_supports-color@8.1.1\node_modules\ioredis\built\Redis.js:196:41)
+    at Object.onceWrapper (node:events:630:28)
+    at Socket.emit (node:events:509:28)
+    at Socket._onTimeout (node:net:611:8)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7) {
+  errorno: 'ETIMEDOUT',
+  code: 'ETIMEDOUT',
+  syscall: 'connect'
+}
+Error: connect ECONNREFUSED 192.168.3.106:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '192.168.3.106',
+  port: 6379
+}

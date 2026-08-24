@@ -71,6 +71,8 @@ interface ExecutiveMetricRow {
   netRevenue: string;
   cost: string;
   tax: string;
+  fees: string;
+  freight: string;
   profit: string;
   margin: string;
   invoices: bigint;
@@ -146,6 +148,8 @@ interface ExecutiveInvoiceRow {
   netRevenue: string;
   cost: string;
   tax: string;
+  fees: string;
+  freight: string;
   profit: string;
   margin: string;
   quantity: string;
@@ -213,6 +217,8 @@ export class DashboardService {
           ROUND(COALESCE(SUM(n.venda_liquido),0),2)::text AS "netRevenue",
           ROUND(COALESCE(SUM(n.custo_liquido),0),2)::text cost,
           ROUND(COALESCE(SUM(n.impostos),0),2)::text tax,
+          ROUND(COALESCE(SUM(n.taxa),0),2)::text fees,
+          ROUND(COALESCE(SUM(n.frete),0),2)::text freight,
           ROUND(COALESCE(SUM(n.lucro),0),2)::text profit,
           ROUND(CASE WHEN COALESCE(SUM(n.valor),0)=0 THEN 0 ELSE SUM(n.lucro)/SUM(n.valor)*100 END,2)::text margin,
           COUNT(*)::bigint invoices
@@ -328,6 +334,8 @@ export class DashboardService {
       netRevenue: "0.00",
       cost: "0.00",
       tax: "0.00",
+      fees: "0.00",
+      freight: "0.00",
       profit: "0.00",
       margin: "0.00",
       invoices: 0n,
@@ -512,6 +520,8 @@ export class DashboardService {
           ROUND(COALESCE(n.venda_liquido,0),2)::text AS "netRevenue",
           ROUND(COALESCE(n.custo_liquido,0),2)::text cost,
           ROUND(COALESCE(n.impostos,0),2)::text tax,
+          ROUND(COALESCE(n.taxa,0),2)::text fees,
+          ROUND(COALESCE(n.frete,0),2)::text freight,
           ROUND(COALESCE(n.lucro,0),2)::text profit,
           ROUND(CASE WHEN COALESCE(n.valor,0)=0 THEN 0 ELSE n.lucro/n.valor*100 END,2)::text margin,
           ROUND(COALESCE(ia.quantity,0),6)::text quantity,

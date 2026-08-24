@@ -158,6 +158,7 @@ interface NfeActionRow {
   id: number;
   blingId: string;
   numero: string;
+  fiscalStatus: number;
   statusId: number | null;
   envioDesabilitado: boolean;
   celular: string | null;
@@ -698,6 +699,12 @@ export class NfeService {
     rawIds: number[],
   ): Promise<NfeBulkActionResponse> {
     const rows = await this.actionRows(principal, rawIds);
+    const cancelled = rows.filter((row) => row.fiscalStatus === 2);
+    if (cancelled.length > 0) {
+      throw new BadRequestException(
+        `NF-e cancelada não pode ser ressincronizada: ${cancelled.map((row) => row.numero).join(", ")}`,
+      );
+    }
     const queued: NfeSyncResponse[] = [];
     for (const row of rows) {
       queued.push(
@@ -771,6 +778,7 @@ export class NfeService {
         n.id,
         n.id_bling::text AS "blingId",
         n.numero::text AS numero,
+        n.situacao AS "fiscalStatus",
         CASE n.invoice_message_status WHEN 'sent' THEN 1 WHEN 'pending' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END AS "statusId",
         COALESCE(p.desabilitar_envio, false) AS "envioDesabilitado",
         NULLIF(BTRIM(p.celular), '') AS celular

@@ -69,6 +69,7 @@ export function summaryPolicyReason(
   invoice: NfePolicySummary,
   policy: NfeSyncPolicy,
 ): string | null {
+  if (invoice.status === 2) return "NF-e cancelada";
   if (!policy.enabled) return null;
   if (!policy.allowedStatuses.includes(invoice.status))
     return `Situação ${invoice.status} não permitida`;

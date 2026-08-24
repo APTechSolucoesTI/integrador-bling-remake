@@ -39,6 +39,12 @@ interface ParsedItem {
   taxes: ParsedTax[];
 }
 
+interface ParsedXml {
+  destinationState: string | null;
+  destinationTaxId: string | null;
+  items: ParsedItem[];
+}
+
 interface ProductRow {
   id: number;
   blingProductId: string | null;
@@ -344,7 +350,7 @@ function parseTaxes(det: XmlObject): ParsedTax[] {
   return result;
 }
 
-function parseXml(xml: string): ParsedItem[] {
+function parseXml(xml: string): ParsedXml {
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: "@",
@@ -358,7 +364,9 @@ function parseXml(xml: string): ParsedItem[] {
     object(object(parsed?.["nfeProc"])?.["NFe"]) ?? object(parsed?.["NFe"]);
   const info = object(nfe?.["infNFe"]);
   if (!info) throw new Error("XML não contém uma NF-e válida");
-  return list(info["det"]).map((rawDet, index) => {
+  const destination = object(info["dest"]);
+  const destinationAddress = object(destination?.["enderDest"]);
+  const items = list(info["det"]).map((rawDet, index) => {
     const det = object(rawDet);
     const product = object(det?.["prod"]);
     if (!det || !product) throw new Error(`Item ${index + 1} inválido no XML`);
@@ -380,6 +388,12 @@ function parseXml(xml: string): ParsedItem[] {
       taxes: parseTaxes(det),
     };
   });
+  return {
+    destinationState:
+      text(destinationAddress?.["UF"]).toLocaleUpperCase("pt-BR") || null,
+    destinationTaxId: text(destination?.["IE"]) || null,
+    items,
+  };
 }
 
 function installmentCount(note: string | null): number | null {
@@ -390,6 +404,35 @@ function installmentCount(note: string | null): number | null {
 
 function round(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function resolveFreightCost(
+  xmlFreight: number,
+  orderFreight: number | null | undefined,
+  allocation: number,
+): number {
+  return xmlFreight > 0 ? xmlFreight : (orderFreight ?? 0) * allocation;
+}
+
+export function applyConfiguredDifal(
+  taxes: ParsedTax[],
+  destinationInternalRate: number | null | undefined,
+): ParsedTax[] {
+  if (!destinationInternalRate || destinationInternalRate <= 0) return taxes;
+  const icms = taxes.find((entry) => entry.name === "ICMS");
+  if (!icms || icms.base <= 0 || icms.rate <= 0) return taxes;
+  const rate = Math.max(0, destinationInternalRate - icms.rate);
+  return [
+    ...taxes.filter((entry) => entry.name !== "DIFAL"),
+    {
+      name: "DIFAL",
+      cst: null,
+      base: icms.base,
+      reduction: 0,
+      rate,
+      value: (icms.base * rate) / 100,
+    },
+  ];
 }
 
 export class NfeXmlProcessor {
@@ -404,7 +447,8 @@ export class NfeXmlProcessor {
     itemPolicy?: NfeXmlPolicyFilters;
   }): Promise<NfeXmlProcessResult> {
     const xml = await downloadXml(input.xmlUrl);
-    const items = parseXml(xml);
+    const parsedXml = parseXml(xml);
+    const items = parsedXml.items;
     if (items.length === 0) throw new Error("XML da NF-e não possui itens");
     const ignoredReason = input.itemPolicy
       ? itemPolicyReason(items, input.itemPolicy)
@@ -438,6 +482,26 @@ export class NfeXmlProcessor {
         `)
         )[0];
         if (!invoice) throw new Error("NF-e não encontrada para cálculo");
+
+        const configuredDifalRate =
+          parsedXml.destinationTaxId === null &&
+          parsedXml.destinationState !== null &&
+          parsedXml.destinationState !== "SP"
+            ? ((
+                await transaction.$queryRaw<RateRow[]>(Prisma.sql`
+                  SELECT aliquota_interna::float AS rate
+                  FROM tributacao_difal
+                  WHERE unit_id = ${input.unitId}
+                    AND estado = ${parsedXml.destinationState}
+                    AND active = true
+                  LIMIT 1
+                `)
+              )[0]?.rate ?? null)
+            : null;
+
+        for (const item of items) {
+          item.taxes = applyConfiguredDifal(item.taxes, configuredDifalRate);
+        }
 
         const products = await transaction.$queryRaw<ProductRow[]>(Prisma.sql`
         SELECT id,
@@ -615,7 +679,15 @@ export class NfeXmlProcessor {
           let configuredTaxTotal = 0;
           let feeTotal = 0;
           let fixedCreditTotal = 0;
-          const freight = item.freight + (orderCosts.freight ?? 0) * allocation;
+          // O frete do XML já compõe a NF-e e é a fonte fiscal de verdade.
+          // `taxas.custoFrete` do pedido costuma representar o mesmo frete e
+          // somá-lo novamente duplicava o custo. Pedido serve apenas como fallback
+          // para documentos cujo XML não distribuiu frete nos itens.
+          const freight = resolveFreightCost(
+            item.freight,
+            orderCosts.freight,
+            allocation,
+          );
 
           const inserted = await transaction.$queryRaw<IdRow[]>(Prisma.sql`
           INSERT INTO nfe_item (

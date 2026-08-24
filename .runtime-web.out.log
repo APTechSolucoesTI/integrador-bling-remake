@@ -8,3 +8,16 @@ Creating turbopack project {
   testMode: true
 }
 
+▲ Next.js 16.3.0 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.3.198:3000
+✓ Ready in 571ms
+✓ Running next.config.ts took 54ms
+Creating turbopack project {
+  dir: 'C:\\Projetos\\integrador-bling-remake\\integrador-bling-remake\\apps\\web',
+  testMode: true
+}
+
+ GET / 200 in 1109ms (next.js: 625ms, application-code: 484ms)
+ GET / 200 in 86ms (next.js: 9ms, application-code: 76ms)
+ GET / 200 in 143ms (next.js: 19ms, application-code: 124ms)

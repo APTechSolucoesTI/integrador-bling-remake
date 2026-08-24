@@ -1,6 +1,6 @@
 # Status da modernização
 
-Atualizado em: 2026-08-13
+Atualizado em: 2026-08-24
 
 ## Produto implementado
 
@@ -17,6 +17,9 @@ Atualizado em: 2026-08-13
 - Estrutura comercial ampliada com pedidos de venda e CRUD de setores.
 - Crédito de ICMS corrigido para `custo dos produtos × alíquota`; Lucro e Margem permite ressincronizar uma NF-e e recalcular a composição financeira.
 - Detalhe financeiro da NF-e expõe desconto, frete e outras despesas (`vOutro`) por item e destaca visualmente inconsistências de vínculo/cálculo.
+- Frete fiscal corrigido: valor do XML prevalece e frete do pedido serve somente como fallback; backfill seguro corrigiu notas já calculadas. Sincronização normal aceita apenas situações 5/6, deixando cancelamentos no fluxo dedicado.
+- DIFAL de destinatário não contribuinte segue a alíquota interna configurada por UF, como no `NFEService`; canceladas também são bloqueadas em ressincronizações e recálculos manuais.
+- Dashboard de lucro expõe Taxas e Frete como KPIs e no relatório auditável/CSV.
 - Importação inteligente CSV disponível em Produtos, Pessoas, NF-e, Documentos, Comercial e Operações: detecta separador/codificação, sugere mapeamento por aliases, mostra prévia, valida campos e faz upsert tenant-aware em 12 cadastros Bling.
 
 ## Banco independente concluído

@@ -568,6 +568,18 @@ function Profit({
           onClick={() => report("profit", {})}
         />
         <Kpi
+          label="Taxas"
+          value={brl(data.metrics.fees)}
+          detail="Comissões e taxas operacionais"
+          onClick={() => report("profit", {})}
+        />
+        <Kpi
+          label="Frete"
+          value={brl(data.metrics.freight)}
+          detail="Frete fiscal das NF-e"
+          onClick={() => report("profit", {})}
+        />
+        <Kpi
           label="Custo líquido"
           value={brl(data.metrics.cost)}
           onClick={() => report("profit", {})}

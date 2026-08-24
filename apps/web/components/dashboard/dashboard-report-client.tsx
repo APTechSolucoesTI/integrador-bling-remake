@@ -228,6 +228,8 @@ export function DashboardReportClient({ kind }: { kind: string }) {
                         <th>Valor</th>
                         <th>Venda líquida</th>
                         <th>Impostos</th>
+                        <th>Taxas</th>
+                        <th>Frete</th>
                         <th>Custo líquido</th>
                         <th>Lucro</th>
                         <th>Margem</th>
@@ -279,6 +281,8 @@ export function DashboardReportClient({ kind }: { kind: string }) {
                           <td>{money(item.revenue)}</td>
                           <td>{money(item.netRevenue)}</td>
                           <td>{money(item.tax)}</td>
+                          <td>{money(item.fees)}</td>
+                          <td>{money(item.freight)}</td>
                           <td>{money(item.cost)}</td>
                           <td
                             className={
@@ -823,6 +827,8 @@ function csvHeaders(kind: string) {
         ...common,
         "Venda líquida",
         "Impostos",
+        "Taxas",
+        "Frete",
         "Custo líquido",
         "Lucro",
         "Margem",
@@ -853,6 +859,8 @@ function csvRow(item: DashboardInvoiceReport["items"][number], kind: string) {
         ...common,
         item.netRevenue,
         item.tax,
+        item.fees,
+        item.freight,
         item.cost,
         item.profit,
         item.margin,

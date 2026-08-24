@@ -48,6 +48,7 @@ interface LegacyInvoiceRow {
 interface LegacyInvoiceXmlRow {
   id: number;
   xmlUrl: string | null;
+  status: number;
 }
 interface ExistsRow {
   exists: boolean;
@@ -170,9 +171,10 @@ export class ProductionIntegrationProcessor {
     const pageSize = Math.min(Math.max(input.pageSize ?? 100, 1), 100);
     const maxPages = Math.min(Math.max(input.maxPages ?? 4, 1), 4);
     const maxRecords = Math.max(input.maxRecords ?? Number.MAX_SAFE_INTEGER, 1);
+    // Cancelamentos possuem fluxo próprio e nunca entram na sincronização
+    // fiscal/financeira normal, mesmo que uma política antiga ainda contenha 2.
     const statuses = policy.allowedStatuses.filter(
-      (status): status is 2 | 5 | 6 =>
-        status === 2 || status === 5 || status === 6,
+      (status): status is 5 | 6 => status === 5 || status === 6,
     );
     const directions = policy.allowedDirections.filter(
       (direction): direction is 0 | 1 => direction === 0 || direction === 1,
@@ -1326,7 +1328,7 @@ export class ProductionIntegrationProcessor {
       throw new BadRequestError("Tenant sem unidade produtiva ativa");
     const invoice = (
       await this.database.$queryRaw<LegacyInvoiceXmlRow[]>(Prisma.sql`
-        SELECT id, link_xml AS "xmlUrl"
+        SELECT id, link_xml AS "xmlUrl", situacao AS status
         FROM nfe
         WHERE id = ${nfeId} AND unit_id = ${context.tenantId}
         LIMIT 1
@@ -1334,6 +1336,8 @@ export class ProductionIntegrationProcessor {
     )[0];
     if (!invoice)
       throw new BadRequestError("NF-e não encontrada na unidade ativa");
+    if (invoice.status === 2)
+      throw new BadRequestError("NF-e cancelada não pode ser recalculada");
     if (!invoice.xmlUrl)
       throw new BadRequestError("NF-e ainda não possui XML sincronizado");
     const calculation = await this.#nfeXml.process({

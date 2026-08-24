@@ -127,7 +127,6 @@ export function NfeSyncPolicyPanel({
                 options={[
                   { value: 6, label: "Autorizada" },
                   { value: 5, label: "Pendente" },
-                  { value: 2, label: "Cancelada" },
                 ]}
                 disabled={!canEdit}
                 onChange={(allowedStatuses) =>
