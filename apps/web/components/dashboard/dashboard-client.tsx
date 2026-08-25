@@ -193,8 +193,7 @@ export function DashboardClient() {
               <span>INTELIGÊNCIA · RESULTADOS</span>
               <h1>Visão geral da operação</h1>
               <p>
-                Indicadores fiscais e financeiros calculados diretamente no
-                PostgreSQL.
+                Indicadores fiscais e financeiros.
               </p>
             </div>
             <button onClick={() => router.refresh()}>
@@ -570,7 +569,7 @@ function Profit({
         <Kpi
           label="Taxas"
           value={brl(data.metrics.fees)}
-          detail="Comissões e taxas operacionais"
+          detail="Comissões e Taxas"
           onClick={() => report("profit", {})}
         />
         <Kpi
@@ -580,9 +579,9 @@ function Profit({
           onClick={() => report("profit", {})}
         />
         <Kpi
-          label="Outras despesas / ajustes"
+          label="Outras Despesas"
           value={brl(data.metrics.otherExpenses)}
-          detail="Acréscimos do XML e arredondamentos"
+          detail="Acréscimo do XML"
           onClick={() => report("profit", {})}
         />
         <Kpi
