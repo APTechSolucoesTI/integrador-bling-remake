@@ -369,6 +369,7 @@ export const dashboardExecutiveSchema = z.object({
     tax: moneySchema,
     fees: moneySchema,
     freight: moneySchema,
+    otherExpenses: moneySchema,
     profit: moneySchema,
     margin: z.string().regex(/^-?\d+\.\d{2}$/),
     invoices: z.number().int().nonnegative(),
@@ -464,6 +465,7 @@ export const dashboardInvoiceReportSchema = z.object({
       tax: moneySchema,
       fees: moneySchema,
       freight: moneySchema,
+      otherExpenses: moneySchema,
       profit: moneySchema,
       margin: z.string().regex(/^-?\d+\.\d{2}$/),
       quantity: z.string(),
@@ -1778,6 +1780,7 @@ export type NcmCreditInput = z.infer<typeof ncmCreditInputSchema>;
 export const integrationJobSchema = z.object({
   tenantId: z.uuid(),
   jobType: z.enum([
+    "bling.sync-daily-integrity",
     "bling.sync-nfe",
     "bling.sync-cancelled-nfe",
     "bling.sync-products",

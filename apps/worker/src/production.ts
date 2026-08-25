@@ -590,7 +590,7 @@ export class ProductionIntegrationProcessor {
       await this.database.$transaction(
         async (transaction) => {
           for (const product of products) {
-            if (!product.summary.cost) {
+            if (product.summary.cost == null) {
               missingCost.push(
                 product.summary.code ??
                   product.summary.name ??
@@ -619,7 +619,7 @@ export class ProductionIntegrationProcessor {
                   codigo = COALESCE(${product.summary.code ?? null}, codigo),
                   descricao = COALESCE(${product.summary.shortDescription ?? null}, descricao),
                   ncm = COALESCE(${product.detail.ncm ?? null}, ncm),
-                  custo = COALESCE(${product.summary.cost || null}, custo),
+                  custo = COALESCE(${product.summary.cost ?? null}, custo),
                   active = COALESCE(${product.summary.status ?? "A"}, 'A') <> 'I',
                   group_id = ${groupId},
                   fabricacao_propria = ${ownProduction},

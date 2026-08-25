@@ -27,6 +27,7 @@ interface ClockParts {
 export class OperationalScheduler {
   #timer: ReturnType<typeof setInterval> | null = null;
   #running = false;
+  #dailyIntegrityDate: string | null = null;
 
   constructor(
     private readonly database: DatabaseClient,
@@ -50,8 +51,9 @@ export class OperationalScheduler {
     this.#running = true;
     try {
       const clock = saoPauloClock(now);
-      const [schedules, refreshTargets] = await Promise.all([
-        this.database.$queryRaw<ScheduleRow[]>(Prisma.sql`
+      const [schedules, refreshTargets, dailyIntegrityTargets] =
+        await Promise.all([
+          this.database.$queryRaw<ScheduleRow[]>(Prisma.sql`
         SELECT
           tenant.id::text AS "tenantId",
           tenant.id::text AS "unitId",
@@ -76,18 +78,26 @@ export class OperationalScheduler {
         WHERE tenant.active = TRUE
           AND tenant.demo = FALSE
       `),
-        this.database.oAuthCredential.findMany({
-          where: {
-            kind: "bling",
-            status: "connected",
-            accessTokenExpiresAt: {
-              lte: new Date(now.getTime() + 10 * 60_000),
+          this.database.oAuthCredential.findMany({
+            where: {
+              kind: "bling",
+              status: "connected",
+              accessTokenExpiresAt: {
+                lte: new Date(now.getTime() + 10 * 60_000),
+              },
+              tenant: { active: true, demo: false },
             },
-            tenant: { active: true, demo: false },
-          },
-          select: { tenantId: true },
-        }),
-      ]);
+            select: { tenantId: true },
+          }),
+          this.database.oAuthCredential.findMany({
+            where: {
+              kind: "bling",
+              status: "connected",
+              tenant: { active: true, demo: false },
+            },
+            select: { tenantId: true },
+          }),
+        ]);
 
       for (const target of refreshTargets) {
         await this.enqueue(
@@ -96,6 +106,23 @@ export class OperationalScheduler {
           `${clock.date}-${clock.hour}-${clock.minute}`,
           {},
         );
+      }
+
+      if (clock.hour >= 1 && this.#dailyIntegrityDate !== clock.date) {
+        for (const target of dailyIntegrityTargets) {
+          await this.enqueue(
+            target.tenantId,
+            "bling.sync-daily-integrity",
+            clock.date,
+            {
+              from: clock.yesterday,
+              to: clock.yesterday,
+              cancelledFrom: clock.weekAgo,
+              cancelledTo: clock.date,
+            },
+          );
+        }
+        this.#dailyIntegrityDate = clock.date;
       }
 
       for (const schedule of schedules) {

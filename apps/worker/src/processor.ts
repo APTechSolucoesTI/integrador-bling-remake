@@ -126,6 +126,46 @@ export function createIntegrationProcessor(
         demo: false as const,
       };
       switch (job.jobType) {
+        case "bling.sync-daily-integrity": {
+          const from = stringPayload(job.payload, "from");
+          const to = stringPayload(job.payload, "to");
+          const paymentMethods =
+            await dependencies.production.syncPaymentMethods(context);
+          const salesChannels =
+            await dependencies.production.syncSalesChannels(context);
+          const sellers = await dependencies.production.syncSellers(context);
+          const operationNatures =
+            await dependencies.production.syncOperationNatures(context);
+          const products = await dependencies.production.syncProducts(context);
+          const salesOrders = await dependencies.production.syncSalesOrders(
+            context,
+            { from, to },
+          );
+          const cancelledNfe = await dependencies.production.syncCancelledNfe(
+            context,
+            {
+              issuedFrom: stringPayload(job.payload, "cancelledFrom"),
+              issuedTo: stringPayload(job.payload, "cancelledTo"),
+            },
+          );
+          const nfe = await dependencies.production.syncNfe(context, {
+            issuedFrom: from,
+            issuedTo: to,
+          });
+          return {
+            mode: "production",
+            from,
+            to,
+            paymentMethods,
+            salesChannels,
+            sellers,
+            operationNatures,
+            products,
+            salesOrders,
+            cancelledNfe,
+            nfe,
+          };
+        }
         case "bling.sync-nfe":
           return dependencies.production.syncNfe(context, {
             issuedFrom: stringPayload(job.payload, "from"),
@@ -204,6 +244,13 @@ export function createIntegrationProcessor(
     };
 
     switch (job.jobType) {
+      case "bling.sync-daily-integrity":
+        return {
+          mode: "demo",
+          from: stringPayload(job.payload, "from"),
+          to: stringPayload(job.payload, "to"),
+          synchronized: false,
+        };
       case "bling.sync-nfe": {
         const issuedFrom = stringPayload(job.payload, "from");
         const issuedTo = stringPayload(job.payload, "to");

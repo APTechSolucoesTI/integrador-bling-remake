@@ -145,8 +145,13 @@ export function DashboardReportClient({ kind }: { kind: string }) {
 
   const title = reportTitle(kind, search);
   const items = report?.items ?? [];
-  const invoiceDetailHref = (id: number) =>
-    profitReport ? `/app/finance/nfe/${id}` : `/app/nfe/${id}`;
+  const dashboardHref = `/app/dashboard?${dashboardQuery(search, kind)}`;
+  const invoiceDetailHref = (id: number) => {
+    const detailPath = profitReport
+      ? `/app/finance/nfe/${id}`
+      : `/app/nfe/${id}`;
+    return `${detailPath}?returnTo=${encodeURIComponent(dashboardHref)}`;
+  };
   return (
     <main className={styles.shell}>
       <ApplicationSidebar session={session} open={menu} onLogout={logout} />
@@ -230,6 +235,7 @@ export function DashboardReportClient({ kind }: { kind: string }) {
                         <th>Impostos</th>
                         <th>Taxas</th>
                         <th>Frete</th>
+                        <th>Outras despesas</th>
                         <th>Custo líquido</th>
                         <th>Lucro</th>
                         <th>Margem</th>
@@ -283,6 +289,7 @@ export function DashboardReportClient({ kind }: { kind: string }) {
                           <td>{money(item.tax)}</td>
                           <td>{money(item.fees)}</td>
                           <td>{money(item.freight)}</td>
+                          <td>{money(item.otherExpenses)}</td>
                           <td>{money(item.cost)}</td>
                           <td
                             className={
@@ -649,7 +656,7 @@ function ProductAnalysisReport({
                               String(
                                 Number(item.quantity)
                                   ? Number(item.totalCost) /
-                                    Number(item.quantity)
+                                      Number(item.quantity)
                                   : 0,
                               ),
                             )}
@@ -829,6 +836,7 @@ function csvHeaders(kind: string) {
         "Impostos",
         "Taxas",
         "Frete",
+        "Outras despesas",
         "Custo líquido",
         "Lucro",
         "Margem",
@@ -861,6 +869,7 @@ function csvRow(item: DashboardInvoiceReport["items"][number], kind: string) {
         item.tax,
         item.fees,
         item.freight,
+        item.otherExpenses,
         item.cost,
         item.profit,
         item.margin,

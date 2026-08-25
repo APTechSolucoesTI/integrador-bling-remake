@@ -42,7 +42,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
@@ -59,6 +59,14 @@ export function NfeDetailClient({
 }) {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTarget = safeReturnTarget(searchParams.get("returnTo"));
+  const backHref = returnTarget ?? (financial ? "/app/finance" : "/app/nfe");
+  const backLabel = returnTarget?.startsWith("/app/reports/")
+    ? "Voltar ao relatório"
+    : returnTarget?.startsWith("/app/dashboard")
+      ? "Voltar ao dashboard"
+      : "Voltar à listagem";
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [data, setData] = useState<NfeDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -228,9 +236,7 @@ export function NfeDetailClient({
         <FileText size={28} />
         <h1>NF-e indisponível</h1>
         <p>{error}</p>
-        <Link href={financial ? "/app/finance" : "/app/nfe"}>
-          Voltar à listagem
-        </Link>
+        <Link href={backHref}>{backLabel}</Link>
       </main>
     );
   const invoice = data.invoice;
@@ -329,11 +335,8 @@ export function NfeDetailClient({
           <ApplicationHeaderActions session={session} onLogout={logout} />
         </header>
         <div className={shell.content}>
-          <Link
-            className={styles.back}
-            href={financial ? "/app/finance" : "/app/nfe"}
-          >
-            <ArrowLeft size={14} /> Voltar à listagem
+          <Link className={styles.back} href={backHref}>
+            <ArrowLeft size={14} /> {backLabel}
           </Link>
           <section className={styles.hero}>
             <div>
@@ -538,18 +541,20 @@ export function NfeDetailClient({
               <b>{data.items.length} ITENS</b>
             </header>
             <div className={styles.tableWrap}>
-              <table className={financial ? styles.financialItemsTable : undefined}>
+              <table
+                className={financial ? styles.financialItemsTable : undefined}
+              >
                 <thead>
                   <tr>
                     <th>Item / produto</th>
                     <th>CFOP</th>
-                        <th>Quantidade</th>
-                        {financial ? (
-                          <>
-                            <th>Desconto do item</th>
-                            <th>Frete do item</th>
-                            <th>Outras despesas</th>
-                            <th>Venda líquida</th>
+                    <th>Quantidade</th>
+                    {financial ? (
+                      <>
+                        <th>Desconto do item</th>
+                        <th>Frete do item</th>
+                        <th>Outras despesas</th>
+                        <th>Venda líquida</th>
                         <th>Custo líquido</th>
                         <th>Impostos</th>
                         <th>Lucro</th>
@@ -901,7 +906,10 @@ function FinancialMemory({
       operation: "subtract" as const,
       detail: creditDetail(entry.rate, entry.items),
     })),
-    ...adjustmentLine(breakdown.costs.adjustment, "Ajuste do cálculo persistido"),
+    ...adjustmentLine(
+      breakdown.costs.adjustment,
+      "Ajuste do cálculo persistido",
+    ),
   ];
   const taxLines: CalculationLine[] = [
     ...breakdown.taxes.items.map((entry) => ({
@@ -927,7 +935,10 @@ function FinancialMemory({
       operation: "add" as const,
       detail: componentDetail(entry.rate, null, null, entry.items),
     })),
-    ...adjustmentLine(breakdown.fees.adjustment, "Ajuste do cálculo persistido"),
+    ...adjustmentLine(
+      breakdown.fees.adjustment,
+      "Ajuste do cálculo persistido",
+    ),
   ];
 
   return (
@@ -1159,6 +1170,12 @@ function boletoStatus(value: number | null): string {
       : value === 3
         ? "Cancelado"
         : "Situação não informada";
+}
+function safeReturnTarget(value: string | null): string | null {
+  if (!value || !value.startsWith("/app/") || value.startsWith("//"))
+    return null;
+  if (value.includes("\\") || /[\r\n]/.test(value)) return null;
+  return value;
 }
 function safeHttpUrl(value: string | null): string | null {
   if (!value) return null;

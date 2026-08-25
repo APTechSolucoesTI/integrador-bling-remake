@@ -352,6 +352,7 @@ function notificationNfeHref(job: IntegrationJob): string {
 
 function jobLabel(jobType: IntegrationJob["jobType"]): string {
   const labels: Partial<Record<IntegrationJob["jobType"], string>> = {
+    "bling.sync-daily-integrity": "Integridade diária do Bling",
     "bling.sync-nfe": "Sincronização de NF-e",
     "bling.sync-cancelled-nfe": "Atualização de cancelamentos",
     "bling.sync-products": "Sincronização de produtos",

@@ -580,6 +580,12 @@ function Profit({
           onClick={() => report("profit", {})}
         />
         <Kpi
+          label="Outras despesas / ajustes"
+          value={brl(data.metrics.otherExpenses)}
+          detail="Acréscimos do XML e arredondamentos"
+          onClick={() => report("profit", {})}
+        />
+        <Kpi
           label="Custo líquido"
           value={brl(data.metrics.cost)}
           onClick={() => report("profit", {})}

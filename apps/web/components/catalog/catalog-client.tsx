@@ -92,8 +92,8 @@ export function CatalogClient({ kind }: { kind: CatalogKind }) {
       const params = new URLSearchParams({ page: String(page), pageSize });
       if (kind === "products") {
         if (next.idProduto) params.set("idProduto", next.idProduto);
-        if (next.nome || next.search)
-          params.set("nome", next.nome || next.search);
+        if (next.search) params.set("search", next.search);
+        if (next.nome) params.set("nome", next.nome);
         if (next.codigo) params.set("codigo", next.codigo);
         if (next.flag) params.set("fabricacaoPropria", next.flag);
       } else {
