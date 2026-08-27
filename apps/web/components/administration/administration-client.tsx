@@ -516,6 +516,7 @@ export function AdministrationClient({ mode }: { mode: Mode }) {
             ? {
                 name: settingsData.organization.name,
                 brandName: settingsData.organization.brandName,
+                taxRegime: settingsData.organization.taxRegime,
               }
             : {}),
           zoom: settingsData.preferences.zoom,
@@ -754,7 +755,10 @@ export function AdministrationClient({ mode }: { mode: Mode }) {
                   className={shell.refreshButton}
                   type="button"
                   onClick={() => {
-                    setNewUser({ ...blankUser, tenantIds: [session.tenant.id] });
+                    setNewUser({
+                      ...blankUser,
+                      tenantIds: [session.tenant.id],
+                    });
                     setShowCreate(true);
                   }}
                 >
@@ -881,7 +885,9 @@ export function AdministrationClient({ mode }: { mode: Mode }) {
                           ...newUser,
                           tenantIds: event.target.checked
                             ? [...newUser.tenantIds, tenant.id]
-                            : newUser.tenantIds.filter((id) => id !== tenant.id),
+                            : newUser.tenantIds.filter(
+                                (id) => id !== tenant.id,
+                              ),
                         })
                       }
                     />
@@ -1155,7 +1161,9 @@ export function AdministrationClient({ mode }: { mode: Mode }) {
                           ...editUser,
                           tenantIds: event.target.checked
                             ? [...editUser.tenantIds, tenant.id]
-                            : editUser.tenantIds.filter((id) => id !== tenant.id),
+                            : editUser.tenantIds.filter(
+                                (id) => id !== tenant.id,
+                              ),
                         })
                       }
                     />
@@ -1491,6 +1499,29 @@ function SettingsView({
             />
           </label>
           <label>
+            <span>Regime tributário</span>
+            <select
+              disabled={!canEditOrganization}
+              value={organization.taxRegime}
+              onChange={(event) =>
+                onChange({
+                  ...data,
+                  organization: {
+                    ...organization,
+                    taxRegime: event.target.value as
+                      "Lucro Presumido" | "Simples Nacional",
+                  },
+                })
+              }
+            >
+              <option value="Lucro Presumido">Lucro Presumido</option>
+              <option value="Simples Nacional">Simples Nacional</option>
+            </select>
+            <small>
+              Define a regra fiscal usada no cálculo das NF-e desta unidade.
+            </small>
+          </label>
+          <label>
             <span>Identificador</span>
             <input disabled value={organization.slug} />
           </label>
@@ -1597,12 +1628,12 @@ function SettingsView({
           </span>
         </div>
         <button type="button" disabled={saving} onClick={() => void onSave()}>
-            {saving ? (
-              <LoaderCircle className={shell.spin} size={15} />
-            ) : (
-              <Save size={15} />
-            )}{" "}
-            Salvar alterações
+          {saving ? (
+            <LoaderCircle className={shell.spin} size={15} />
+          ) : (
+            <Save size={15} />
+          )}{" "}
+          Salvar alterações
         </button>
       </footer>
     </div>

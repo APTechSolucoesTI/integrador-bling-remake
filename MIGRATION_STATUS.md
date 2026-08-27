@@ -19,6 +19,7 @@ Atualizado em: 2026-08-24
 - Detalhe financeiro da NF-e expõe desconto, frete e outras despesas (`vOutro`) por item e destaca visualmente inconsistências de vínculo/cálculo.
 - Frete fiscal corrigido: valor do XML prevalece e frete do pedido serve somente como fallback; backfill seguro corrigiu notas já calculadas. Sincronização normal aceita apenas situações 5/6, deixando cancelamentos no fluxo dedicado.
 - DIFAL de destinatário não contribuinte segue a alíquota interna configurada por UF, como no `NFEService`; canceladas também são bloqueadas em ressincronizações e recálculos manuais.
+- Regime tributário voltou à configuração por unidade. O cálculo de NF-e separa LP e SN conforme `NFEService`: SN não soma tributos/créditos exclusivos de LP e preserva custos/taxas configurados aplicáveis.
 - Dashboard de lucro expõe Taxas e Frete como KPIs e no relatório auditável/CSV.
 - Importação inteligente CSV disponível em Produtos, Pessoas, NF-e, Documentos, Comercial e Operações: detecta separador/codificação, sugere mapeamento por aliases, mostra prévia, valida campos e faz upsert tenant-aware em 12 cadastros Bling.
 

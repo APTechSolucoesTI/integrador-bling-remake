@@ -1,8 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
   applyConfiguredDifal,
+  isConfiguredTaxApplicable,
+  normalizeTaxRegime,
   resolveFreightCost,
 } from "../src/nfe-xml-processor.js";
+
+describe("regime tributário da unidade", () => {
+  it("aceita sigla e nome do Simples Nacional", () => {
+    expect(normalizeTaxRegime("SN")).toBe("SN");
+    expect(normalizeTaxRegime("Simples Nacional")).toBe("SN");
+    expect(normalizeTaxRegime("Lucro Presumido")).toBe("LP");
+  });
+
+  it("não aplica tributos exclusivos do Lucro Presumido no SN", () => {
+    expect(isConfiguredTaxApplicable("SN", "IRPJ")).toBe(false);
+    expect(isConfiguredTaxApplicable("SN", "DAS Simples Nacional")).toBe(true);
+    expect(isConfiguredTaxApplicable("LP", "IRPJ")).toBe(true);
+  });
+});
 
 describe("fonte do frete da NF-e", () => {
   it("não soma novamente o frete do pedido quando o XML já possui frete", () => {

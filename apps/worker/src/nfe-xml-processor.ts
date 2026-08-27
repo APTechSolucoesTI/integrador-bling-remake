@@ -12,6 +12,15 @@ const TAXES_IN_LP = new Set([
   "COFINS",
   "DIFAL",
 ]);
+const LP_ONLY_CONFIGURED_TAXES = new Set([
+  "IPI",
+  "ICMSST",
+  "ICMS",
+  "PIS",
+  "COFINS",
+  "DIFAL",
+  "IRPJ",
+]);
 
 type XmlObject = Record<string, unknown>;
 
@@ -66,6 +75,7 @@ interface InvoiceContextRow {
   storeId: string | null;
   total: number | null;
   installmentNote: string | null;
+  taxRegime: string | null;
 }
 
 interface FixedCostRow {
@@ -406,6 +416,23 @@ function round(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+export type TaxRegime = "LP" | "SN";
+
+export function normalizeTaxRegime(
+  value: string | null | undefined,
+): TaxRegime {
+  const normalized = normalizeName(value ?? "");
+  return normalized === "sn" || normalized === "simples nacional" ? "SN" : "LP";
+}
+
+export function isConfiguredTaxApplicable(
+  regime: TaxRegime,
+  name: string | null,
+): boolean {
+  if (regime === "LP") return true;
+  return !LP_ONLY_CONFIGURED_TAXES.has((name ?? "").trim().toUpperCase());
+}
+
 export function resolveFreightCost(
   xmlFreight: number,
   orderFreight: number | null | undefined,
@@ -475,13 +502,16 @@ export class NfeXmlProcessor {
                  n.id_bling::text AS "blingId",
                  n.loja_id::text AS "storeId",
                  n.valor::float AS total,
-                 n.parcela_obs AS "installmentNote"
+                 n.parcela_obs AS "installmentNote",
+                 tenant.tax_regime AS "taxRegime"
           FROM nfe n
+          JOIN saas_tenant tenant ON tenant.id = n.unit_id
           WHERE n.id = ${input.nfeId} AND n.unit_id = ${input.unitId}
           FOR UPDATE
         `)
         )[0];
         if (!invoice) throw new Error("NF-e não encontrada para cálculo");
+        const taxRegime = normalizeTaxRegime(invoice.taxRegime);
 
         const configuredDifalRate =
           parsedXml.destinationTaxId === null &&
@@ -669,7 +699,8 @@ export class NfeXmlProcessor {
           const ipiSt = item.taxes
             .filter((entry) => entry.name === "IPI" || entry.name === "ICMSST")
             .reduce((sum, entry) => sum + entry.value, 0);
-          const grossRevenue = item.grossValue + ipiSt;
+          const grossRevenue =
+            item.grossValue + (taxRegime === "LP" ? ipiSt : 0);
           const netRevenue =
             grossRevenue - item.discount + item.freight + item.otherExpenses;
           const allocation =
@@ -757,6 +788,11 @@ export class NfeXmlProcessor {
             const rate = cost.value ?? 0;
             const isCredit = normalizeName(cost.category ?? "") === "credito";
             if (isCredit && product?.ownManufacture) continue;
+            if (
+              cost.category === "Imposto" &&
+              !isConfiguredTaxApplicable(taxRegime, cost.name)
+            )
+              continue;
             const base = isCredit
               ? grossCost
               : cost.scope === "Nota"
@@ -827,11 +863,15 @@ export class NfeXmlProcessor {
             .reduce((sum, entry) => sum + entry.value, 0);
           const ipiRate =
             item.taxes.find((entry) => entry.name === "IPI")?.rate ?? 0;
-          const ipiCredit = (grossCost * ipiRate) / 100;
-          const icmsCredit = fixedCreditTotal;
+          const ipiCredit =
+            taxRegime === "LP" ? (grossCost * ipiRate) / 100 : 0;
+          const icmsCredit = taxRegime === "LP" ? fixedCreditTotal : 0;
           const netCost =
             Math.max(0, grossCost - ipiCredit - icmsCredit) + fixedCostTotal;
-          const taxTotal = xmlTaxTotal + configuredTaxTotal;
+          // NFEService legado: SN ignora tributos do XML no resultado e considera
+          // somente impostos configurados como custo. LP considera ambos.
+          const taxTotal =
+            (taxRegime === "LP" ? xmlTaxTotal : 0) + configuredTaxTotal;
           const profit =
             netRevenue -
             (netCost + taxTotal + feeTotal + freight + item.otherExpenses);

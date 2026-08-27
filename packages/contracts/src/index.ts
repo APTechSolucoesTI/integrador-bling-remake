@@ -1477,6 +1477,7 @@ export const tenantSettingsResponseSchema = z.object({
     slug: z.string(),
     brandName: z.string().nullable(),
     legacyUnitId: z.number().int().positive().nullable(),
+    taxRegime: z.enum(["Lucro Presumido", "Simples Nacional"]),
   }),
   preferences: z.object({
     zoom: z.number().int().min(50).max(150),
@@ -1491,6 +1492,7 @@ export type TenantSettingsResponse = z.infer<
 export const tenantSettingsUpdateSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
   brandName: z.string().trim().max(120).nullable().optional(),
+  taxRegime: z.enum(["Lucro Presumido", "Simples Nacional"]).optional(),
   zoom: z.number().int().min(50).max(150).optional(),
   fixedMenu: z.boolean().optional(),
 });

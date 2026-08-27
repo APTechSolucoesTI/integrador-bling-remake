@@ -86,7 +86,10 @@ export class AdministrationService {
       new Set([principal.activeTenantId, ...input.tenantIds]),
     );
     await this.assertManageableTenants(principal, requestedTenantIds);
-    const profiles = await this.copyProfileToTenants(profile, requestedTenantIds);
+    const profiles = await this.copyProfileToTenants(
+      profile,
+      requestedTenantIds,
+    );
     const passwordHash = await hashPassword(input.password);
     await this.database.$transaction(async (transaction) => {
       const user = await transaction.user.create({
@@ -154,8 +157,13 @@ export class AdministrationService {
       : null;
     if (selectedTenantIds) {
       await this.assertManageableTenants(principal, selectedTenantIds);
-      if (userId === principal.userId && !selectedTenantIds.includes(principal.activeTenantId))
-        throw new BadRequestException("Você não pode remover seu próprio acesso");
+      if (
+        userId === principal.userId &&
+        !selectedTenantIds.includes(principal.activeTenantId)
+      )
+        throw new BadRequestException(
+          "Você não pode remover seu próprio acesso",
+        );
     }
     const targetProfile = profile ?? membership.accessProfile;
     const profileIds = selectedTenantIds
@@ -471,11 +479,17 @@ export class AdministrationService {
   ): Promise<void> {
     const allowed = new Set(await this.manageableTenantIds(principal));
     if (tenantIds.some((tenantId) => !allowed.has(tenantId)))
-      throw new ForbiddenException("Uma ou mais unidades não podem ser administradas");
+      throw new ForbiddenException(
+        "Uma ou mais unidades não podem ser administradas",
+      );
   }
 
   private async copyProfileToTenants(
-    profile: { name: string; description: string | null; permissions: string[] },
+    profile: {
+      name: string;
+      description: string | null;
+      permissions: string[];
+    },
     tenantIds: string[],
   ): Promise<Map<string, string>> {
     const result = new Map<string, string>();
@@ -531,6 +545,10 @@ export class AdministrationService {
         slug: tenant.slug,
         brandName: tenant.brandName,
         legacyUnitId: tenant.legacyUnitId,
+        taxRegime:
+          tenant.taxRegime === "SN" || tenant.taxRegime === "Simples Nacional"
+            ? "Simples Nacional"
+            : "Lucro Presumido",
       },
       preferences: {
         zoom: preferences?.zoom ?? 100,
@@ -548,7 +566,9 @@ export class AdministrationService {
     input: TenantSettingsUpdate,
   ): Promise<TenantSettingsResponse> {
     if (
-      (input.name !== undefined || input.brandName !== undefined) &&
+      (input.name !== undefined ||
+        input.brandName !== undefined ||
+        input.taxRegime !== undefined) &&
       !principal.permissions.includes("settings:manage")
     )
       throw new ForbiddenException(
@@ -565,13 +585,20 @@ export class AdministrationService {
     if (!membership)
       throw new NotFoundException("Vínculo com a empresa não encontrado");
     await this.database.$transaction(async (transaction) => {
-      if (input.name !== undefined || input.brandName !== undefined) {
+      if (
+        input.name !== undefined ||
+        input.brandName !== undefined ||
+        input.taxRegime !== undefined
+      ) {
         await transaction.tenant.update({
           where: { id: principal.activeTenantId },
           data: {
             ...(input.name !== undefined ? { name: input.name } : {}),
             ...(input.brandName !== undefined
               ? { brandName: input.brandName }
+              : {}),
+            ...(input.taxRegime !== undefined
+              ? { taxRegime: input.taxRegime }
               : {}),
           },
         });
