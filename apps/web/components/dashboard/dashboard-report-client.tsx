@@ -19,7 +19,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
-import { downloadCsv, downloadExcel } from "../../lib/csv";
+import { downloadExcel, downloadXlsx } from "../../lib/csv";
 import { ApplicationSidebar } from "../layout/application-sidebar";
 import { ApplicationHeaderActions } from "../layout/application-header-actions";
 import { ApplicationGlobalSearch } from "../layout/application-global-search";
@@ -179,14 +179,14 @@ export function DashboardReportClient({ kind }: { kind: string }) {
             <button
               disabled={!items.length}
               onClick={() =>
-                downloadCsv(
+                downloadXlsx(
                   "nfe-dashboard",
                   csvHeaders(kind),
                   items.map((item) => csvRow(item, kind)),
                 )
               }
             >
-              <Download size={15} /> Exportar CSV
+              <Download size={15} /> Exportar Excel
             </button>
           </div>
           <div className={styles.activeFilters}>

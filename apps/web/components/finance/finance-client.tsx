@@ -44,7 +44,7 @@ import { API_URL } from "../../lib/api";
 import { ApplicationSidebar } from "../layout/application-sidebar";
 import { ApplicationHeaderActions } from "../layout/application-header-actions";
 import { ApplicationGlobalSearch } from "../layout/application-global-search";
-import { downloadCsv } from "../../lib/csv";
+import { downloadXlsx } from "../../lib/csv";
 import shell from "../nfe/nfe.module.css";
 import styles from "./finance.module.css";
 
@@ -255,7 +255,7 @@ export function FinanceClient() {
 
   function exportCurrentPage() {
     if (!data?.items.length) return;
-    downloadCsv(
+    downloadXlsx(
       `rentabilidade-${applied.dataInicial}-${applied.dataFinal}-pagina-${data.pagination.page}`,
       [
         "NF-e",
@@ -402,7 +402,7 @@ export function FinanceClient() {
                 disabled={!data?.items.length}
                 onClick={exportCurrentPage}
               >
-                <Download size={15} /> Exportar CSV
+                <Download size={15} /> Exportar Excel
               </button>
               <button
                 className={shell.refreshButton}
