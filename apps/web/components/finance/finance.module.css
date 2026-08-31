@@ -323,6 +323,7 @@
 }
 .itemBling {
   text-align: center;
+  background: #f5faf7 !important;
 }
 .itemBling a {
   width: 29px;
@@ -334,36 +335,27 @@
   color: #247a48;
   background: #eff8f2;
 }
-.itemProduct {
-  max-width: none !important;
+.itemSpacer {
+  background: #f5faf7 !important;
+}
+.itemName,
+.itemMeta {
   white-space: normal;
+  overflow-wrap: anywhere;
 }
-.itemProduct > small {
-  margin-top: 5px !important;
-}
-.itemProductLayout {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-.itemProductLayout > div {
-  min-width: 0;
-  flex: 1;
-}
-.itemProductLayout small {
+.itemName > strong,
+.itemName > small,
+.itemMeta > strong,
+.itemMeta > small {
   display: block;
-  margin-top: 5px;
 }
-.itemProductBling {
-  width: 29px;
-  height: 29px;
-  flex: 0 0 29px;
-  border: 1px solid #cfe2d6;
-  border-radius: 8px;
-  display: inline-grid !important;
-  place-items: center;
-  color: #247a48;
-  background: #eff8f2;
+.itemName > strong {
+  line-height: 1.35;
+}
+.itemIssue {
+  margin-top: 5px !important;
+  color: #9a6816 !important;
+  font-weight: 750 !important;
 }
 .itemDetailWarning > td {
   background: #fffaf0;

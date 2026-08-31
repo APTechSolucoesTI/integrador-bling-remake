@@ -53,10 +53,7 @@ import {
   consumeListNavigationState,
   saveListNavigationState,
 } from "../../lib/list-navigation-state";
-import {
-  blingProductUrl,
-  InvoiceProductCell,
-} from "../shared/invoice-items-detail";
+import { blingProductUrl } from "../shared/invoice-items-detail";
 import shell from "../nfe/nfe.module.css";
 import styles from "./finance.module.css";
 
@@ -901,40 +898,44 @@ export function FinanceClient() {
                               key={`detail-${detailItem.id}`}
                               className={`${styles.itemDetailRow} ${detailItem.inconsistencia ? styles.itemDetailWarning : ""}`}
                             >
-                              <td colSpan={4} className={styles.itemProduct}>
-                                <div className={styles.itemProductLayout}>
-                                  {detailItem.produtoId ? (
-                                    <a
-                                      className={styles.itemProductBling}
-                                      href={blingProductUrl(
-                                        detailItem.produtoId,
-                                      )}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="Abrir produto no Bling"
-                                      aria-label={`Abrir ${detailItem.nome} no Bling`}
-                                    >
-                                      <PackageSearch size={15} />
-                                    </a>
-                                  ) : null}
-                                  <div>
-                                    <InvoiceProductCell
-                                      name={detailItem.nome}
-                                      code={
-                                        detailItem.codigo ??
-                                        detailItem.produtoId
-                                      }
-                                      productId={null}
-                                      inconsistency={detailItem.inconsistencia}
-                                    />
-                                    <small>
-                                      CFOP {detailItem.cfop ?? "—"} · Qtd.{" "}
-                                      {Number(
-                                        detailItem.quantidade,
-                                      ).toLocaleString("pt-BR")}
-                                    </small>
-                                  </div>
-                                </div>
+                              <td
+                                className={styles.itemSpacer}
+                                aria-hidden="true"
+                              />
+                              <td className={styles.itemBling}>
+                                {detailItem.produtoId ? (
+                                  <a
+                                    href={blingProductUrl(detailItem.produtoId)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Abrir produto no Bling"
+                                    aria-label={`Abrir ${detailItem.nome} no Bling`}
+                                  >
+                                    <PackageSearch size={15} />
+                                  </a>
+                                ) : null}
+                              </td>
+                              <td className={styles.itemName}>
+                                <strong>{detailItem.nome}</strong>
+                                <small>
+                                  {detailItem.codigo ??
+                                    detailItem.produtoId ??
+                                    "Sem código"}
+                                </small>
+                              </td>
+                              <td className={styles.itemMeta}>
+                                <small>CFOP · Quantidade</small>
+                                <strong>
+                                  {detailItem.cfop ?? "—"} ·{" "}
+                                  {Number(detailItem.quantidade).toLocaleString(
+                                    "pt-BR",
+                                  )}
+                                </strong>
+                                {detailItem.inconsistencia ? (
+                                  <small className={styles.itemIssue}>
+                                    {detailItem.inconsistencia}
+                                  </small>
+                                ) : null}
                               </td>
                               <td>
                                 <small>Venda líquida</small>
