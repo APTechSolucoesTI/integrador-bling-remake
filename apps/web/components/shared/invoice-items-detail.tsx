@@ -100,7 +100,7 @@ export function FinancialInvoiceItemsDetail({
 }) {
   if (compact)
     return (
-      <div className={styles.inlineDetail}>
+      <div className={`${styles.inlineDetail} ${styles.financialDetail}`}>
         {items.length === 0 ? (
           <div className={styles.empty}>
             Nenhum item persistido para esta nota.
@@ -315,7 +315,7 @@ export function MarketplaceInvoiceItemsDetail({
   items: MarketplaceDetailItem[];
 }) {
   return (
-    <div className={styles.inlineDetail}>
+    <div className={`${styles.inlineDetail} ${styles.marketplaceDetail}`}>
       {items.length === 0 ? (
         <div className={styles.empty}>
           Nenhum item encontrado para esta nota.
