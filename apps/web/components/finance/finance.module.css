@@ -335,9 +335,7 @@
   color: #247a48;
   background: #eff8f2;
 }
-.itemSpacer {
-  background: #f5faf7 !important;
-}
+
 .itemName,
 .itemMeta {
   white-space: normal;
