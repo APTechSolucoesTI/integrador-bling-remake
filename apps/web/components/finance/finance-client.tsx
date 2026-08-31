@@ -2,6 +2,7 @@
 
 import type {
   NfeBulkActionResponse,
+  NfeDetailResponse,
   InvoiceFilterOptionsResponse,
   ProfitabilityResponse,
   SessionResponse,
@@ -16,6 +17,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Download,
+  ExternalLink,
   FileText,
   Filter,
   Gauge,
@@ -38,13 +40,19 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
 import { ApplicationSidebar } from "../layout/application-sidebar";
 import { ApplicationHeaderActions } from "../layout/application-header-actions";
 import { ApplicationGlobalSearch } from "../layout/application-global-search";
 import { downloadXlsx } from "../../lib/csv";
+import {
+  clearListNavigationState,
+  consumeListNavigationState,
+  saveListNavigationState,
+} from "../../lib/list-navigation-state";
+import { FinancialInvoiceItemsDetail } from "../shared/invoice-items-detail";
 import shell from "../nfe/nfe.module.css";
 import styles from "./finance.module.css";
 
@@ -56,6 +64,12 @@ interface FinanceFilters {
   dataFinal: string;
   calculo: string;
   somentePrejuizo: boolean;
+}
+
+interface FinanceNavigationState {
+  draft: FinanceFilters;
+  applied: FinanceFilters;
+  page: number;
 }
 
 function currentPeriod(): FinanceFilters {
@@ -79,7 +93,10 @@ export function FinanceClient() {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [data, setData] = useState<ProfitabilityResponse | null>(null);
   const [filterOptions, setFilterOptions] =
-    useState<InvoiceFilterOptionsResponse>({ customers: [], salesChannels: [] });
+    useState<InvoiceFilterOptionsResponse>({
+      customers: [],
+      salesChannels: [],
+    });
   const [draft, setDraft] = useState<FinanceFilters>(currentPeriod);
   const [applied, setApplied] = useState<FinanceFilters>(currentPeriod);
   const [page, setPage] = useState(1);
@@ -93,6 +110,13 @@ export function FinanceClient() {
     tone: "success" | "error";
     message: string;
   } | null>(null);
+  const [navigationReady, setNavigationReady] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [detailCache, setDetailCache] = useState<
+    Record<number, NfeDetailResponse>
+  >({});
+  const [detailLoading, setDetailLoading] = useState<number | null>(null);
+  const [detailError, setDetailError] = useState<Record<number, string>>({});
 
   const load = useCallback(
     async (filters: FinanceFilters, selectedPage: number) => {
@@ -134,8 +158,27 @@ export function FinanceClient() {
   );
 
   useEffect(() => {
-    void load(applied, page);
-  }, [applied, load, page, refreshKey]);
+    const shouldRestore = new URLSearchParams(window.location.search).has(
+      "restoreFilters",
+    );
+    const restored = shouldRestore
+      ? consumeListNavigationState<FinanceNavigationState>("finance")
+      : null;
+    if (!shouldRestore) clearListNavigationState("finance");
+    if (shouldRestore) {
+      window.history.replaceState(window.history.state, "", "/app/finance");
+    }
+    if (restored) {
+      setDraft(restored.draft);
+      setApplied(restored.applied);
+      setPage(restored.page);
+    }
+    setNavigationReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (navigationReady) void load(applied, page);
+  }, [applied, load, navigationReady, page, refreshKey]);
 
   useEffect(() => {
     let active = true;
@@ -165,10 +208,57 @@ export function FinanceClient() {
   }
 
   function clearFilters() {
+    clearListNavigationState("finance");
     const period = currentPeriod();
     setDraft(period);
     setPage(1);
     setApplied(period);
+  }
+
+  function preserveNavigation() {
+    saveListNavigationState<FinanceNavigationState>("finance", {
+      draft,
+      applied,
+      page,
+    });
+    window.history.replaceState(
+      window.history.state,
+      "",
+      "/app/finance?restoreFilters=1",
+    );
+  }
+
+  function openDetail(id: number) {
+    preserveNavigation();
+    router.push(
+      `/app/finance/nfe/${id}?returnTo=${encodeURIComponent("/app/finance?restoreFilters=1")}`,
+    );
+  }
+
+  async function toggleDetail(id: number) {
+    if (expandedId === id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(id);
+    if (detailCache[id] || detailLoading === id) return;
+    setDetailLoading(id);
+    setDetailError((current) => ({ ...current, [id]: "" }));
+    try {
+      const response = await fetch(`${API_URL}/v1/nfe/${id}/financial`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("detail");
+      const detail = (await response.json()) as NfeDetailResponse;
+      setDetailCache((current) => ({ ...current, [id]: detail }));
+    } catch {
+      setDetailError((current) => ({
+        ...current,
+        [id]: "Não foi possível carregar os itens desta NF-e.",
+      }));
+    } finally {
+      setDetailLoading(null);
+    }
   }
 
   async function logout() {
@@ -190,7 +280,8 @@ export function FinanceClient() {
   function toggleVisible() {
     const visibleIds = data?.items.map((item) => item.id) ?? [];
     const allSelected =
-      visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+      visibleIds.length > 0 &&
+      visibleIds.every((id) => selectedIds.includes(id));
     setSelectedIds(allSelected ? [] : visibleIds);
   }
 
@@ -631,14 +722,17 @@ export function FinanceClient() {
               <table>
                 <thead>
                   <tr>
+                    <th className={styles.expandCell}>
+                      <span className={styles.srOnly}>Detalhes</span>
+                    </th>
                     <th className={shell.checkCell}>
                       <input
                         type="checkbox"
                         checked={Boolean(
                           data?.items.length &&
-                            data.items.every((item) =>
-                              selectedIds.includes(item.id),
-                            ),
+                          data.items.every((item) =>
+                            selectedIds.includes(item.id),
+                          ),
                         )}
                         onChange={toggleVisible}
                         aria-label="Selecionar NF-e visíveis"
@@ -657,7 +751,7 @@ export function FinanceClient() {
                 <tbody>
                   {loading && !data ? (
                     <tr>
-                      <td className={shell.empty} colSpan={9}>
+                      <td className={shell.empty} colSpan={10}>
                         <LoaderCircle className={shell.spin} size={21} />
                         Carregando resultados...
                       </td>
@@ -665,90 +759,154 @@ export function FinanceClient() {
                   ) : null}
                   {!loading && data?.items.length === 0 ? (
                     <tr>
-                      <td className={shell.empty} colSpan={9}>
+                      <td className={shell.empty} colSpan={10}>
                         <CircleDollarSign size={21} />
                         Nenhuma nota encontrada neste recorte.
                       </td>
                     </tr>
                   ) : null}
                   {data?.items.map((item) => (
-                    <tr
-                      key={item.id}
-                      className={styles.clickableRow}
-                      onClick={() => router.push(`/app/finance/nfe/${item.id}`)}
-                    >
-                      <td className={shell.checkCell}>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(item.id)}
-                          onChange={() => toggleSelected(item.id)}
-                          onClick={(event) => event.stopPropagation()}
-                          aria-label={`Selecionar NF-e ${item.numero}`}
-                        />
-                      </td>
-                      <td>
-                        <Link
-                          href={`/app/finance/nfe/${item.id}`}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <strong>NF-e {item.numero}</strong>
-                        </Link>
-                        <small>
-                          {item.dataEmissao
-                            ? dateLabel(item.dataEmissao)
-                            : "Sem data"}
-                        </small>
-                      </td>
-                      <td>
-                        <strong>{item.nome}</strong>
-                        <small>{item.tipoVenda}</small>
-                      </td>
-                      <td className={shell.money}>
-                        {money(item.valor)}
-                        <small>Líquida: {money(item.vendaLiquida)}</small>
-                      </td>
-                      <td>
-                        <strong>
-                          {money(
-                            String(
-                              Number(item.desconto) +
-                                Number(item.outrasDespesas),
-                            ),
-                          )}
-                        </strong>
-                        <small>
-                          Frete: {money(item.frete)} · Taxa: {money(item.taxa)}
-                        </small>
-                      </td>
-                      <td>
-                        <strong>{money(item.custoLiquido)}</strong>
-                        <small>Impostos: {money(item.impostos)}</small>
-                      </td>
-                      <td
-                        className={
-                          Number(item.lucro) < 0 ? styles.loss : styles.profit
-                        }
+                    <Fragment key={item.id}>
+                      <tr
+                        className={styles.clickableRow}
+                        onClick={() => openDetail(item.id)}
                       >
-                        {money(item.lucro)}
-                      </td>
-                      <td>
-                        <strong
+                        <td className={styles.expandCell}>
+                          <button
+                            type="button"
+                            className={styles.expandButton}
+                            aria-expanded={expandedId === item.id}
+                            aria-label={`${expandedId === item.id ? "Fechar" : "Abrir"} itens da NF-e ${item.numero}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void toggleDetail(item.id);
+                            }}
+                          >
+                            {expandedId === item.id ? (
+                              <ChevronDown size={16} />
+                            ) : (
+                              <ChevronRight size={16} />
+                            )}
+                          </button>
+                        </td>
+                        <td className={shell.checkCell}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(item.id)}
+                            onChange={() => toggleSelected(item.id)}
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={`Selecionar NF-e ${item.numero}`}
+                          />
+                        </td>
+                        <td>
+                          <Link
+                            href={`/app/finance/nfe/${item.id}?returnTo=${encodeURIComponent("/app/finance?restoreFilters=1")}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (
+                                !event.ctrlKey &&
+                                !event.metaKey &&
+                                !event.shiftKey
+                              )
+                                preserveNavigation();
+                            }}
+                          >
+                            <strong>NF-e {item.numero}</strong>
+                          </Link>
+                          <a
+                            className={styles.newTabLink}
+                            href={`/app/finance/nfe/${item.id}?returnTo=${encodeURIComponent("/app/finance")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(event) => event.stopPropagation()}
+                            title="Abrir em nova guia"
+                            aria-label={`Abrir NF-e ${item.numero} em nova guia`}
+                          >
+                            <ExternalLink size={13} />
+                          </a>
+                          <small>
+                            {item.dataEmissao
+                              ? dateLabel(item.dataEmissao)
+                              : "Sem data"}
+                          </small>
+                        </td>
+                        <td>
+                          <strong>{item.nome}</strong>
+                          <small>{item.tipoVenda}</small>
+                        </td>
+                        <td className={shell.money}>
+                          {money(item.valor)}
+                          <small>Líquida: {money(item.vendaLiquida)}</small>
+                        </td>
+                        <td>
+                          <strong>
+                            {money(
+                              String(
+                                Number(item.desconto) +
+                                  Number(item.outrasDespesas),
+                              ),
+                            )}
+                          </strong>
+                          <small>
+                            Frete: {money(item.frete)} · Taxa:{" "}
+                            {money(item.taxa)}
+                          </small>
+                        </td>
+                        <td>
+                          <strong>{money(item.custoLiquido)}</strong>
+                          <small>Impostos: {money(item.impostos)}</small>
+                        </td>
+                        <td
                           className={
-                            Number(item.margemLucro) < 0
-                              ? styles.loss
-                              : styles.profit
+                            Number(item.lucro) < 0 ? styles.loss : styles.profit
                           }
                         >
-                          {item.margemLucro}%
-                        </strong>
-                      </td>
-                      <td>
-                        <CalculationBadge value={item.calculo} />
-                        <small className={styles.observation}>
-                          {item.observacao ?? "Sem observações"}
-                        </small>
-                      </td>
-                    </tr>
+                          {money(item.lucro)}
+                        </td>
+                        <td>
+                          <strong
+                            className={
+                              Number(item.margemLucro) < 0
+                                ? styles.loss
+                                : styles.profit
+                            }
+                          >
+                            {item.margemLucro}%
+                          </strong>
+                        </td>
+                        <td>
+                          <CalculationBadge value={item.calculo} />
+                          <small className={styles.observation}>
+                            {item.observacao ?? "Sem observações"}
+                          </small>
+                        </td>
+                      </tr>
+                      {expandedId === item.id ? (
+                        <tr className={styles.detailRow}>
+                          <td colSpan={10}>
+                            {detailLoading === item.id ? (
+                              <div className={styles.detailState}>
+                                <LoaderCircle
+                                  className={shell.spin}
+                                  size={18}
+                                />{" "}
+                                Carregando itens...
+                              </div>
+                            ) : null}
+                            {detailError[item.id] ? (
+                              <div className={styles.detailError}>
+                                {detailError[item.id]}
+                              </div>
+                            ) : null}
+                            {detailCache[item.id] ? (
+                              <FinancialInvoiceItemsDetail
+                                items={detailCache[item.id]!.items}
+                              />
+                            ) : null}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -834,7 +992,6 @@ function dateLabel(value: string): string {
   const [year, month, day] = value.split("-");
   return `${day}/${month}/${year}`;
 }
-
 
 async function responseMessage(response: Response): Promise<string> {
   try {

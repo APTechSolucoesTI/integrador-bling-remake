@@ -22,7 +22,10 @@
 
 .filterGrid {
   display: grid;
-  grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(350px, 1.8fr) auto;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(
+      180px,
+      1fr
+    ) minmax(350px, 1.8fr) auto;
   gap: 9px;
   align-items: end;
 }
@@ -145,6 +148,54 @@
 .numericStrong {
   text-align: right !important;
   font-variant-numeric: tabular-nums;
+}
+.expandCell {
+  width: 38px;
+  padding-right: 2px !important;
+  text-align: center !important;
+}
+.expandButton {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d6e2db;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #28764a;
+  background: #fff;
+  cursor: pointer;
+}
+.expandButton:hover {
+  background: #edf8f1;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.detailRow > td {
+  padding: 0 !important;
+  background: #f6faf7 !important;
+  white-space: normal !important;
+}
+.detailState,
+.detailError {
+  min-height: 86px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #65756c;
+  font-size: 9px;
+}
+.detailError {
+  color: #a64747;
+  background: #fff7f7;
 }
 
 .numericStrong {

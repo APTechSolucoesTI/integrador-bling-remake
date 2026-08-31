@@ -1394,6 +1394,27 @@ export type MarketplaceFeesResponse = z.infer<
   typeof marketplaceFeesResponseSchema
 >;
 
+export const marketplaceFeeItemsResponseSchema = z.object({
+  invoiceId: z.number().int().positive(),
+  items: z.array(
+    z.object({
+      id: z.number().int().positive(),
+      productId: z.string().nullable(),
+      code: z.string().nullable(),
+      description: z.string(),
+      quantity: z.string(),
+      itemValue: moneySchema,
+      commissionValue: moneySchema,
+      commissionPercent: z.string().regex(/^\d+\.\d{2}$/),
+      freightValue: moneySchema,
+      freightPercent: z.string().regex(/^\d+\.\d{2}$/),
+    }),
+  ),
+});
+export type MarketplaceFeeItemsResponse = z.infer<
+  typeof marketplaceFeeItemsResponseSchema
+>;
+
 export const adminUsersResponseSchema = z.object({
   items: z.array(
     z.object({

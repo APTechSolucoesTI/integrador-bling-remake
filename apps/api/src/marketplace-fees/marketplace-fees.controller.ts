@@ -2,12 +2,14 @@ import {
   BadRequestException,
   Controller,
   Get,
+  Param,
   Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
 import {
   marketplaceFeesQuerySchema,
+  type MarketplaceFeeItemsResponse,
   type MarketplaceFeesResponse,
 } from "@integrador/contracts";
 import { PermissionsGuard, RequirePermissions } from "../auth/roles.guard.js";
@@ -31,5 +33,17 @@ export class MarketplaceFeesController {
       throw new BadRequestException("Filtros de taxas inválidos");
     }
     return this.marketplaceFees.list(request.auth, parsed.data);
+  }
+
+  @Get(":id/items")
+  items(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") rawId: string,
+  ): Promise<MarketplaceFeeItemsResponse> {
+    const id = Number(rawId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new BadRequestException("NF-e inválida");
+    }
+    return this.marketplaceFees.items(request.auth, id);
   }
 }

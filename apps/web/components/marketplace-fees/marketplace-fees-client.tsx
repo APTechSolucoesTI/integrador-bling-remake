@@ -2,11 +2,13 @@
 
 import type {
   MarketplaceFeesResponse,
+  MarketplaceFeeItemsResponse,
   SessionResponse,
 } from "@integrador/contracts";
 import {
   BadgeDollarSign,
   CalendarRange,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -19,13 +21,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { API_URL } from "../../lib/api";
 import { homeRoute } from "../../lib/home-route";
 import { downloadCsv } from "../../lib/csv";
 import { ApplicationSidebar } from "../layout/application-sidebar";
 import { ApplicationHeaderActions } from "../layout/application-header-actions";
 import { ApplicationGlobalSearch } from "../layout/application-global-search";
+import { MarketplaceInvoiceItemsDetail } from "../shared/invoice-items-detail";
 import shell from "../nfe/nfe.module.css";
 import styles from "./marketplace-fees.module.css";
 
@@ -67,6 +70,12 @@ export function MarketplaceFeesClient() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [switchingTenant, setSwitchingTenant] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [detailCache, setDetailCache] = useState<
+    Record<number, MarketplaceFeeItemsResponse>
+  >({});
+  const [detailLoading, setDetailLoading] = useState<number | null>(null);
+  const [detailError, setDetailError] = useState<Record<number, string>>({});
 
   const load = useCallback(
     async (filters: Filters, selectedPage: number) => {
@@ -178,6 +187,33 @@ export function MarketplaceFeesClient() {
   function applyFilters() {
     setPage(1);
     setApplied({ ...draft });
+  }
+
+  async function toggleDetail(id: number) {
+    if (expandedId === id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(id);
+    if (detailCache[id] || detailLoading === id) return;
+    setDetailLoading(id);
+    setDetailError((current) => ({ ...current, [id]: "" }));
+    try {
+      const response = await fetch(
+        `${API_URL}/v1/marketplace-fees/${id}/items`,
+        { credentials: "include" },
+      );
+      if (!response.ok) throw new Error("detail");
+      const detail = (await response.json()) as MarketplaceFeeItemsResponse;
+      setDetailCache((current) => ({ ...current, [id]: detail }));
+    } catch {
+      setDetailError((current) => ({
+        ...current,
+        [id]: "Não foi possível carregar os itens desta NF-e.",
+      }));
+    } finally {
+      setDetailLoading(null);
+    }
   }
 
   function clearFilters() {
@@ -403,6 +439,9 @@ export function MarketplaceFeesClient() {
               <table>
                 <thead>
                   <tr>
+                    <th className={styles.expandCell}>
+                      <span className={styles.srOnly}>Detalhes</span>
+                    </th>
                     <th>Número NF</th>
                     <th>Coligada</th>
                     <th>Origem</th>
@@ -419,7 +458,7 @@ export function MarketplaceFeesClient() {
                 <tbody>
                   {loading && !data ? (
                     <tr>
-                      <td className={styles.tableState} colSpan={11}>
+                      <td className={styles.tableState} colSpan={12}>
                         <LoaderCircle className={shell.spin} size={20} />
                         Consultando taxas...
                       </td>
@@ -427,7 +466,7 @@ export function MarketplaceFeesClient() {
                   ) : null}
                   {!loading && data?.items.length === 0 ? (
                     <tr>
-                      <td className={styles.tableState} colSpan={11}>
+                      <td className={styles.tableState} colSpan={12}>
                         <BadgeDollarSign size={22} />
                         Nenhuma NF-e do Mercado Livre encontrada para estes
                         filtros.
@@ -435,39 +474,81 @@ export function MarketplaceFeesClient() {
                     </tr>
                   ) : null}
                   {data?.items.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <strong className={styles.invoiceNumber}>
-                          {item.invoiceNumber}
-                        </strong>
-                      </td>
-                      <td>{item.company}</td>
-                      <td>
-                        <span className={styles.origin}>{item.origin}</span>
-                      </td>
-                      <td className={styles.customer}>{item.customer}</td>
-                      <td>
-                        {item.issuedAt
-                          ? dateFormatter.format(new Date(item.issuedAt))
-                          : "—"}
-                      </td>
-                      <td className={styles.numeric}>{money(item.value)}</td>
-                      <td className={styles.numericStrong}>
-                        {money(item.commissionValue)}
-                      </td>
-                      <td className={styles.numeric}>
-                        {percent(item.commissionPercent)}
-                      </td>
-                      <td className={styles.numericStrong}>
-                        {money(item.freightValue)}
-                      </td>
-                      <td className={styles.numeric}>
-                        {percent(item.freightPercent)}
-                      </td>
-                      <td className={styles.numeric}>
-                        {money(item.discountValue)}
-                      </td>
-                    </tr>
+                    <Fragment key={item.id}>
+                      <tr>
+                        <td className={styles.expandCell}>
+                          <button
+                            type="button"
+                            className={styles.expandButton}
+                            aria-expanded={expandedId === item.id}
+                            aria-label={`${expandedId === item.id ? "Fechar" : "Abrir"} itens da NF-e ${item.invoiceNumber}`}
+                            onClick={() => void toggleDetail(item.id)}
+                          >
+                            {expandedId === item.id ? (
+                              <ChevronDown size={16} />
+                            ) : (
+                              <ChevronRight size={16} />
+                            )}
+                          </button>
+                        </td>
+                        <td>
+                          <strong className={styles.invoiceNumber}>
+                            {item.invoiceNumber}
+                          </strong>
+                        </td>
+                        <td>{item.company}</td>
+                        <td>
+                          <span className={styles.origin}>{item.origin}</span>
+                        </td>
+                        <td className={styles.customer}>{item.customer}</td>
+                        <td>
+                          {item.issuedAt
+                            ? dateFormatter.format(new Date(item.issuedAt))
+                            : "—"}
+                        </td>
+                        <td className={styles.numeric}>{money(item.value)}</td>
+                        <td className={styles.numericStrong}>
+                          {money(item.commissionValue)}
+                        </td>
+                        <td className={styles.numeric}>
+                          {percent(item.commissionPercent)}
+                        </td>
+                        <td className={styles.numericStrong}>
+                          {money(item.freightValue)}
+                        </td>
+                        <td className={styles.numeric}>
+                          {percent(item.freightPercent)}
+                        </td>
+                        <td className={styles.numeric}>
+                          {money(item.discountValue)}
+                        </td>
+                      </tr>
+                      {expandedId === item.id ? (
+                        <tr className={styles.detailRow}>
+                          <td colSpan={12}>
+                            {detailLoading === item.id ? (
+                              <div className={styles.detailState}>
+                                <LoaderCircle
+                                  className={shell.spin}
+                                  size={18}
+                                />{" "}
+                                Carregando itens...
+                              </div>
+                            ) : null}
+                            {detailError[item.id] ? (
+                              <div className={styles.detailError}>
+                                {detailError[item.id]}
+                              </div>
+                            ) : null}
+                            {detailCache[item.id] ? (
+                              <MarketplaceInvoiceItemsDetail
+                                items={detailCache[item.id]!.items}
+                              />
+                            ) : null}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

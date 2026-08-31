@@ -408,6 +408,21 @@
   font-size: 8px;
   font-weight: 700;
 }
+.blingProductLink {
+  width: fit-content;
+  margin-top: 5px;
+  padding: 4px 6px;
+  border: 1px solid #cfe2d6;
+  border-radius: 7px;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  color: #247a48;
+  background: #f3faf5;
+  font-size: 7px;
+  font-weight: 800;
+  text-decoration: none;
+}
 .modalBackdrop {
   position: fixed;
   z-index: 80;

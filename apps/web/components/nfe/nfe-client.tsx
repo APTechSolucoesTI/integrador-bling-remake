@@ -46,6 +46,11 @@ import { useRouter } from "next/navigation";
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
+import {
+  clearListNavigationState,
+  consumeListNavigationState,
+  saveListNavigationState,
+} from "../../lib/list-navigation-state";
 import { ApplicationSidebar } from "../layout/application-sidebar";
 import { ApplicationHeaderActions } from "../layout/application-header-actions";
 import { ApplicationGlobalSearch } from "../layout/application-global-search";
@@ -65,6 +70,11 @@ interface Filters {
   statusId: string;
   order: string;
   direction: string;
+}
+interface NfeNavigationState {
+  filters: Filters;
+  appliedFilters: Filters;
+  page: number;
 }
 
 const emptyFilters: Filters = {
@@ -171,14 +181,29 @@ export function NfeClient() {
               (await optionsResponse.json()) as InvoiceFilterOptionsResponse,
             );
           }
+          const shouldRestore = new URLSearchParams(window.location.search).has(
+            "restoreFilters",
+          );
+          const restored = shouldRestore
+            ? consumeListNavigationState<NfeNavigationState>("nfe")
+            : null;
+          if (!shouldRestore) clearListNavigationState("nfe");
+          if (shouldRestore) {
+            window.history.replaceState(window.history.state, "", "/app/nfe");
+          }
           const search =
             new URLSearchParams(window.location.search).get("search")?.trim() ??
             "";
-          const initial = /^\d+$/.test(search)
-            ? { ...emptyFilters, numero: search }
-            : emptyFilters;
+          const initial =
+            restored?.filters ??
+            (/^\d+$/.test(search)
+              ? { ...emptyFilters, numero: search }
+              : emptyFilters);
           setFilters(initial);
-          await requestList(initial);
+          await requestList(
+            restored?.appliedFilters ?? initial,
+            restored?.page ?? 1,
+          );
         }
       } catch {
         if (active) {
@@ -208,8 +233,22 @@ export function NfeClient() {
   }
 
   function clearFilters() {
+    clearListNavigationState("nfe");
     setFilters(emptyFilters);
     void requestList(emptyFilters, 1);
+  }
+
+  function preserveNavigation() {
+    saveListNavigationState<NfeNavigationState>("nfe", {
+      filters,
+      appliedFilters,
+      page: data?.pagination.page ?? 1,
+    });
+    window.history.replaceState(
+      window.history.state,
+      "",
+      "/app/nfe?restoreFilters=1",
+    );
   }
 
   function selectStatus(statusId: number | null) {
@@ -766,7 +805,17 @@ export function NfeClient() {
                           />
                         </td>
                         <td>
-                          <Link href={`/app/nfe/${invoice.id}`}>
+                          <Link
+                            href={`/app/nfe/${invoice.id}?returnTo=${encodeURIComponent("/app/nfe?restoreFilters=1")}`}
+                            onClick={(event) => {
+                              if (
+                                !event.ctrlKey &&
+                                !event.metaKey &&
+                                !event.shiftKey
+                              )
+                                preserveNavigation();
+                            }}
+                          >
                             <strong>#{invoice.numero}</strong>
                           </Link>
                           <small>Série {invoice.serie ?? "—"}</small>

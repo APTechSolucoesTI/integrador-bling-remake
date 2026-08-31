@@ -46,6 +46,10 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "../../lib/api";
+import {
+  blingProductUrl,
+  FinancialInvoiceItemsDetail,
+} from "../shared/invoice-items-detail";
 import { ApplicationSidebar } from "../layout/application-sidebar";
 import { ApplicationHeaderActions } from "../layout/application-header-actions";
 import { ApplicationGlobalSearch } from "../layout/application-global-search";
@@ -540,134 +544,158 @@ export function NfeDetailClient({
               </div>
               <b>{data.items.length} ITENS</b>
             </header>
-            <div className={styles.tableWrap}>
-              <table
-                className={financial ? styles.financialItemsTable : undefined}
-              >
-                <thead>
-                  <tr>
-                    <th>Item / produto</th>
-                    <th>CFOP</th>
-                    <th>Quantidade</th>
-                    {financial ? (
-                      <>
-                        <th>Desconto do item</th>
-                        <th>Frete do item</th>
-                        <th>Outras despesas</th>
-                        <th>Venda líquida</th>
-                        <th>Custo líquido</th>
-                        <th>Impostos</th>
-                        <th>Lucro</th>
-                        <th>Margem</th>
-                      </>
-                    ) : null}
-                    <th>Ação</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((item) => (
-                    <tr
-                      key={item.id}
-                      className={
-                        item.inconsistencia ? styles.inconsistentRow : undefined
-                      }
-                    >
-                      <td>
-                        <strong>{item.nome}</strong>
-                        <small className={styles.productCode}>
-                          {item.codigo ?? item.produtoId ?? "Sem código"}
-                        </small>
-                        {item.inconsistencia ? (
-                          <span className={styles.inconsistencyBadge}>
-                            <AlertTriangle size={12} />
-                            <span>{item.inconsistencia}</span>
-                          </span>
-                        ) : null}
-                      </td>
-                      <td>{item.cfop ?? "—"}</td>
-                      <td>{number(item.quantidade)}</td>
+            {financial ? (
+              <FinancialInvoiceItemsDetail
+                items={data.items}
+                showHeading={false}
+                showActions
+                canNormalize={session.permissions.includes("people:manage")}
+                onNormalize={openNormalization}
+              />
+            ) : (
+              <div className={styles.tableWrap}>
+                <table
+                  className={financial ? styles.financialItemsTable : undefined}
+                >
+                  <thead>
+                    <tr>
+                      <th>Item / produto</th>
+                      <th>CFOP</th>
+                      <th>Quantidade</th>
                       {financial ? (
                         <>
-                          <td>{money(item.desconto)}</td>
-                          <td>{money(item.frete)}</td>
-                          <td
-                            className={
-                              Number(item.outrasDespesas) > 0
-                                ? styles.expenseValue
-                                : undefined
-                            }
-                            title="Valor informado no campo vOutro do XML da NF-e"
-                          >
-                            {money(item.outrasDespesas)}
-                            {Number(item.outrasDespesas) > 0 ? (
-                              <small>Campo vOutro do XML</small>
-                            ) : null}
-                          </td>
-                          <td>{money(item.vendaLiquida)}</td>
-                          <td>{money(item.custoLiquido)}</td>
-                          <td>
-                            {money(item.impostos)}
-                            <small>
-                              Créditos:{" "}
-                              {money(
-                                String(
-                                  Number(item.creditoIpi) +
-                                    Number(item.creditoIcms),
-                                ),
-                              )}
-                            </small>
-                          </td>
-                          <td
-                            className={
-                              Number(item.lucro) < 0
-                                ? styles.negative
-                                : styles.positive
-                            }
-                          >
-                            {money(item.lucro)}
-                          </td>
-                          <td
-                            className={
-                              Number(item.margemLucro) < 0
-                                ? styles.negative
-                                : styles.positive
-                            }
-                          >
-                            {item.margemLucro}%
-                          </td>
+                          <th>Desconto do item</th>
+                          <th>Frete do item</th>
+                          <th>Outras despesas</th>
+                          <th>Venda líquida</th>
+                          <th>Custo líquido</th>
+                          <th>Impostos</th>
+                          <th>Lucro</th>
+                          <th>Margem</th>
                         </>
                       ) : null}
-                      <td>
-                        {item.produtoId === null &&
-                        session.permissions.includes("people:manage") ? (
-                          <button
-                            className={styles.normalizeButton}
-                            type="button"
-                            onClick={() => openNormalization(item)}
-                          >
-                            <Link2 size={13} /> Vincular produto
-                          </button>
-                        ) : (
-                          <span className={styles.linkedProduct}>
-                            {item.produtoId ? "Vinculado" : "—"}
-                          </span>
-                        )}
-                      </td>
+                      <th>Ação</th>
                     </tr>
-                  ))}
-                  {data.items.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={financial ? 12 : 4}
-                        className={styles.tableEmpty}
+                  </thead>
+                  <tbody>
+                    {data.items.map((item) => (
+                      <tr
+                        key={item.id}
+                        className={
+                          item.inconsistencia
+                            ? styles.inconsistentRow
+                            : undefined
+                        }
                       >
-                        Nenhum item persistido para esta nota.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+                        <td>
+                          <strong>{item.nome}</strong>
+                          <small className={styles.productCode}>
+                            {item.codigo ?? item.produtoId ?? "Sem código"}
+                          </small>
+                          {item.produtoId ? (
+                            <a
+                              className={styles.blingProductLink}
+                              href={blingProductUrl(item.produtoId)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`Abrir ${item.nome} no Bling`}
+                              title="Abrir produto no Bling"
+                            >
+                              <PackageSearch size={14} /> Abrir no Bling
+                            </a>
+                          ) : null}
+                          {item.inconsistencia ? (
+                            <span className={styles.inconsistencyBadge}>
+                              <AlertTriangle size={12} />
+                              <span>{item.inconsistencia}</span>
+                            </span>
+                          ) : null}
+                        </td>
+                        <td>{item.cfop ?? "—"}</td>
+                        <td>{number(item.quantidade)}</td>
+                        {financial ? (
+                          <>
+                            <td>{money(item.desconto)}</td>
+                            <td>{money(item.frete)}</td>
+                            <td
+                              className={
+                                Number(item.outrasDespesas) > 0
+                                  ? styles.expenseValue
+                                  : undefined
+                              }
+                              title="Valor informado no campo vOutro do XML da NF-e"
+                            >
+                              {money(item.outrasDespesas)}
+                              {Number(item.outrasDespesas) > 0 ? (
+                                <small>Campo vOutro do XML</small>
+                              ) : null}
+                            </td>
+                            <td>{money(item.vendaLiquida)}</td>
+                            <td>{money(item.custoLiquido)}</td>
+                            <td>
+                              {money(item.impostos)}
+                              <small>
+                                Créditos:{" "}
+                                {money(
+                                  String(
+                                    Number(item.creditoIpi) +
+                                      Number(item.creditoIcms),
+                                  ),
+                                )}
+                              </small>
+                            </td>
+                            <td
+                              className={
+                                Number(item.lucro) < 0
+                                  ? styles.negative
+                                  : styles.positive
+                              }
+                            >
+                              {money(item.lucro)}
+                            </td>
+                            <td
+                              className={
+                                Number(item.margemLucro) < 0
+                                  ? styles.negative
+                                  : styles.positive
+                              }
+                            >
+                              {item.margemLucro}%
+                            </td>
+                          </>
+                        ) : null}
+                        <td>
+                          {item.produtoId === null &&
+                          session.permissions.includes("people:manage") ? (
+                            <button
+                              className={styles.normalizeButton}
+                              type="button"
+                              onClick={() => openNormalization(item)}
+                            >
+                              <Link2 size={13} /> Vincular produto
+                            </button>
+                          ) : (
+                            <span className={styles.linkedProduct}>
+                              {item.produtoId ? "Vinculado" : "—"}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {data.items.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={financial ? 12 : 4}
+                          className={styles.tableEmpty}
+                        >
+                          Nenhum item persistido para esta nota.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
           {financial && data.financialBreakdown ? (
             <FinancialMemory

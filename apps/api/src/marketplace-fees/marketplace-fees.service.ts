@@ -1,6 +1,13 @@
-import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import {
+  marketplaceFeeItemsResponseSchema,
   marketplaceFeesResponseSchema,
+  type MarketplaceFeeItemsResponse,
   type MarketplaceFeesQuery,
   type MarketplaceFeesResponse,
 } from "@integrador/contracts";
@@ -29,6 +36,19 @@ interface CountRow {
 
 interface OptionRow {
   value: string;
+}
+
+interface MarketplaceFeeItemRow {
+  id: number;
+  productId: string | null;
+  code: string | null;
+  description: string;
+  quantity: string;
+  itemValue: string;
+  commissionValue: string;
+  commissionPercent: string;
+  freightValue: string;
+  freightPercent: string;
 }
 
 @Injectable()
@@ -159,5 +179,67 @@ export class MarketplaceFeesService {
         pages: total === 0 ? 0 : Math.ceil(total / query.pageSize),
       },
     });
+  }
+
+  async items(
+    principal: AuthPrincipal,
+    invoiceId: number,
+  ): Promise<MarketplaceFeeItemsResponse> {
+    if (principal.tenantDemo) {
+      throw new BadRequestException(
+        "Detalhes não disponíveis na demonstração pública",
+      );
+    }
+
+    const unitId = principal.activeTenantId;
+    const invoices = await this.database.$queryRaw<
+      Array<{ id: number }>
+    >(Prisma.sql`
+      SELECT n.id
+      FROM nfe n
+      LEFT JOIN canal_venda cv ON cv.loja_id = n.loja_id AND cv.unit_id = n.unit_id
+      WHERE n.id = ${invoiceId}
+        AND n.unit_id = ${unitId}
+        AND n.cancelled_at IS NULL
+        AND n.situacao <> 2
+        AND (
+          cv.tipo = 'MercadoLivre'
+          OR EXISTS (
+            SELECT 1 FROM taxa_item fi
+            JOIN nfe_item ni_fee ON ni_fee.id = fi.nfe_item_id AND ni_fee.unit_id = fi.unit_id
+            WHERE ni_fee.nfe_id = n.id AND fi.unit_id = n.unit_id
+              AND fi.nome ILIKE '%Mercado Livre%'
+          )
+        )
+      LIMIT 1
+    `);
+    if (!invoices[0])
+      throw new NotFoundException("NF-e do Mercado Livre não encontrada");
+
+    const rows = await this.database.$queryRaw<
+      MarketplaceFeeItemRow[]
+    >(Prisma.sql`
+      SELECT
+        ni.id,
+        COALESCE(ni.id_produto::text, p.id_produto::text) AS "productId",
+        NULLIF(BTRIM(p.codigo), '') AS code,
+        COALESCE(NULLIF(BTRIM(p.nome), ''), NULLIF(BTRIM(ni.descricao), ''), 'Produto não identificado') AS description,
+        COALESCE(ni.qnt, 0)::numeric::text AS quantity,
+        ROUND(COALESCE(ni.venda_total, 0)::numeric, 2)::text AS "itemValue",
+        ROUND(COALESCE(SUM(fi.valor) FILTER (WHERE fi.nome ILIKE '%Mercado Livre%'), 0)::numeric, 2)::text AS "commissionValue",
+        ROUND(CASE WHEN COALESCE(ni.venda_total, 0) = 0 THEN 0
+          ELSE COALESCE(SUM(fi.valor) FILTER (WHERE fi.nome ILIKE '%Mercado Livre%'), 0) / ni.venda_total * 100 END, 2)::text AS "commissionPercent",
+        ROUND(COALESCE(ni.frete, 0)::numeric, 2)::text AS "freightValue",
+        ROUND(CASE WHEN COALESCE(ni.venda_total, 0) = 0 THEN 0
+          ELSE COALESCE(ni.frete, 0) / ni.venda_total * 100 END, 2)::text AS "freightPercent"
+      FROM nfe_item ni
+      LEFT JOIN produtos p ON p.id_produto = ni.id_produto AND p.unit_id = ni.unit_id
+      LEFT JOIN taxa_item fi ON fi.nfe_item_id = ni.id AND fi.unit_id = ni.unit_id
+      WHERE ni.nfe_id = ${invoiceId} AND ni.unit_id = ${unitId}
+      GROUP BY ni.id, p.id_produto, p.codigo, p.nome
+      ORDER BY ni.n_item NULLS LAST, ni.id
+    `);
+
+    return marketplaceFeeItemsResponseSchema.parse({ invoiceId, items: rows });
   }
 }

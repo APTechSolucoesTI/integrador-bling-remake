@@ -17,6 +17,7 @@ Atualizado em: 2026-08-24
 - Estrutura comercial ampliada com pedidos de venda e CRUD de setores.
 - Crédito de ICMS corrigido para `custo dos produtos × alíquota`; Lucro e Margem permite ressincronizar uma NF-e e recalcular a composição financeira.
 - Detalhe financeiro da NF-e expõe desconto, frete e outras despesas (`vOutro`) por item e destaca visualmente inconsistências de vínculo/cálculo.
+- Listagens de NF-e e Lucro restauram filtros e paginação ao voltar de um detalhe; Lucro e Taxas ML possuem expansão inline por NF-e com todos os itens e atalho seguro para o cadastro do produto no Bling.
 - Frete fiscal corrigido: valor do XML prevalece e frete do pedido serve somente como fallback; backfill seguro corrigiu notas já calculadas. Sincronização normal aceita apenas situações 5/6, deixando cancelamentos no fluxo dedicado.
 - DIFAL de destinatário não contribuinte segue a alíquota interna configurada por UF, como no `NFEService`; canceladas também são bloqueadas em ressincronizações e recálculos manuais.
 - Regime tributário voltou à configuração por unidade. O cálculo de NF-e separa LP e SN conforme `NFEService`: SN não soma tributos/créditos exclusivos de LP e preserva custos/taxas configurados aplicáveis.
