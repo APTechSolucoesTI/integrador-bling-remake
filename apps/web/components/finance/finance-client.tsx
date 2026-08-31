@@ -888,6 +888,7 @@ export function FinanceClient() {
                             {detailCache[item.id] ? (
                               <FinancialInvoiceItemsDetail
                                 items={detailCache[item.id]!.items}
+                                compact
                               />
                             ) : null}
                           </td>

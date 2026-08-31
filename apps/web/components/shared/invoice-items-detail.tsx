@@ -3,7 +3,6 @@ import { AlertTriangle, Link2, PackageSearch } from "lucide-react";
 import styles from "./invoice-items-detail.module.css";
 
 type FinancialItem = NfeDetailResponse["items"][number];
-
 export interface MarketplaceDetailItem {
   id: number;
   productId: string | null;
@@ -16,7 +15,6 @@ export interface MarketplaceDetailItem {
   freightValue: string;
   freightPercent: string;
 }
-
 const currency = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -65,19 +63,110 @@ function ProductCell({
   );
 }
 
+function InlineValue({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  tone?: "positive" | "negative" | "expense" | undefined;
+}) {
+  return (
+    <div className={`${styles.inlineValue} ${tone ? styles[tone] : ""}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {detail ? <small>{detail}</small> : null}
+    </div>
+  );
+}
+
 export function FinancialInvoiceItemsDetail({
   items,
   showHeading = true,
+  compact = false,
   showActions = false,
   canNormalize = false,
   onNormalize,
 }: {
   items: FinancialItem[];
   showHeading?: boolean;
+  compact?: boolean;
   showActions?: boolean;
   canNormalize?: boolean;
   onNormalize?: (item: FinancialItem) => void;
 }) {
+  if (compact)
+    return (
+      <div className={styles.inlineDetail}>
+        {items.length === 0 ? (
+          <div className={styles.empty}>
+            Nenhum item persistido para esta nota.
+          </div>
+        ) : (
+          items.map((item) => (
+            <div
+              key={item.id}
+              className={`${styles.inlineRow} ${styles.financialInline} ${item.inconsistencia ? styles.inconsistentRow : ""}`}
+            >
+              <div className={styles.inlineProduct}>
+                <span>Item / produto</span>
+                <ProductCell
+                  name={item.nome}
+                  code={item.codigo}
+                  productId={item.produtoId}
+                  inconsistency={item.inconsistencia}
+                />
+              </div>
+              <InlineValue label="CFOP" value={item.cfop ?? "—"} />
+              <InlineValue
+                label="Qtd."
+                value={decimal.format(Number(item.quantidade))}
+              />
+              <InlineValue
+                label="Desconto"
+                value={currency.format(Number(item.desconto))}
+              />
+              <InlineValue
+                label="Frete"
+                value={currency.format(Number(item.frete))}
+              />
+              <InlineValue
+                label="Outras despesas"
+                value={currency.format(Number(item.outrasDespesas))}
+                tone={Number(item.outrasDespesas) > 0 ? "expense" : undefined}
+              />
+              <InlineValue
+                label="Venda líquida"
+                value={currency.format(Number(item.vendaLiquida))}
+              />
+              <InlineValue
+                label="Custo líquido"
+                value={currency.format(Number(item.custoLiquido))}
+              />
+              <InlineValue
+                label="Impostos"
+                value={currency.format(Number(item.impostos))}
+                detail={`Créditos: ${currency.format(Number(item.creditoIpi) + Number(item.creditoIcms))}`}
+              />
+              <InlineValue
+                label="Lucro"
+                value={currency.format(Number(item.lucro))}
+                tone={Number(item.lucro) < 0 ? "negative" : "positive"}
+              />
+              <InlineValue
+                label="Margem"
+                value={`${decimal.format(Number(item.margemLucro))}%`}
+                tone={Number(item.margemLucro) < 0 ? "negative" : "positive"}
+              />
+            </div>
+          ))
+        )}
+      </div>
+    );
+
   return (
     <div className={`${styles.detail} ${!showHeading ? styles.embedded : ""}`}>
       {showHeading ? (
@@ -96,20 +185,20 @@ export function FinancialInvoiceItemsDetail({
           Nenhum item persistido para esta nota.
         </div>
       ) : (
-        <table className={`${styles.itemsTable} ${styles.financialTable}`}>
+        <table className={styles.itemsTable}>
           <colgroup>
             <col className={styles.productColumn} />
             <col />
             <col />
+            <col />
+            <col />
+            <col />
+            <col />
+            <col />
+            <col />
+            <col />
+            <col />
             {showActions ? <col /> : null}
-            <col />
-            <col />
-            <col />
-            <col />
-            <col />
-            <col />
-            <col />
-            <col />
           </colgroup>
           <thead>
             <tr>
@@ -226,74 +315,52 @@ export function MarketplaceInvoiceItemsDetail({
   items: MarketplaceDetailItem[];
 }) {
   return (
-    <div className={styles.detail}>
-      <div className={styles.detailHeading}>
-        <div>
-          <span>DISTRIBUIÇÃO</span>
-          <strong>Itens e taxas da NF-e</strong>
-        </div>
-        <b>
-          {items.length} {items.length === 1 ? "ITEM" : "ITENS"}
-        </b>
-      </div>
+    <div className={styles.inlineDetail}>
       {items.length === 0 ? (
         <div className={styles.empty}>
           Nenhum item encontrado para esta nota.
         </div>
       ) : (
-        <table className={`${styles.itemsTable} ${styles.marketplaceTable}`}>
-          <colgroup>
-            <col className={styles.productColumn} />
-            <col />
-            <col />
-            <col />
-            <col />
-            <col />
-            <col />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>Descrição / SKU</th>
-              <th>Qtd.</th>
-              <th>Valor do item</th>
-              <th>Comissão %</th>
-              <th>Comissão R$</th>
-              <th>Frete %</th>
-              <th>Frete R$</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td data-label="Descrição / SKU">
-                  <ProductCell
-                    name={item.description}
-                    code={item.code}
-                    productId={item.productId}
-                  />
-                </td>
-                <td data-label="Quantidade">
-                  {decimal.format(Number(item.quantity))}
-                </td>
-                <td data-label="Valor do item">
-                  {currency.format(Number(item.itemValue))}
-                </td>
-                <td data-label="Comissão %">
-                  {decimal.format(Number(item.commissionPercent))}%
-                </td>
-                <td data-label="Comissão R$">
-                  {currency.format(Number(item.commissionValue))}
-                </td>
-                <td data-label="Frete %">
-                  {decimal.format(Number(item.freightPercent))}%
-                </td>
-                <td data-label="Frete R$">
-                  {currency.format(Number(item.freightValue))}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        items.map((item) => (
+          <div
+            key={item.id}
+            className={`${styles.inlineRow} ${styles.marketplaceInline}`}
+          >
+            <div className={styles.inlineProduct}>
+              <span>Descrição / SKU</span>
+              <ProductCell
+                name={item.description}
+                code={item.code}
+                productId={item.productId}
+              />
+            </div>
+            <InlineValue
+              label="Qtd."
+              value={decimal.format(Number(item.quantity))}
+            />
+            <InlineValue
+              label="Valor do item"
+              value={currency.format(Number(item.itemValue))}
+            />
+            <InlineValue
+              label="Comissão %"
+              value={`${decimal.format(Number(item.commissionPercent))}%`}
+            />
+            <InlineValue
+              label="Comissão R$"
+              value={currency.format(Number(item.commissionValue))}
+              tone="positive"
+            />
+            <InlineValue
+              label="Frete %"
+              value={`${decimal.format(Number(item.freightPercent))}%`}
+            />
+            <InlineValue
+              label="Frete R$"
+              value={currency.format(Number(item.freightValue))}
+            />
+          </div>
+        ))
       )}
     </div>
   );
