@@ -569,20 +569,24 @@ export function MarketplaceFeesClient() {
                                   </a>
                                 ) : null}
                               </td>
-                              <td colSpan={4} className={styles.itemProduct}>
-                                <InvoiceProductCell
-                                  name={detailItem.description}
-                                  code={detailItem.code ?? detailItem.productId}
-                                  productId={null}
-                                />
-                              </td>
-                              <td>
-                                <small>Qtd.</small>
-                                <strong>
-                                  {Number(detailItem.quantity).toLocaleString(
-                                    "pt-BR",
-                                  )}
-                                </strong>
+                              <td colSpan={5} className={styles.itemProduct}>
+                                <div className={styles.itemProductWithQuantity}>
+                                  <InvoiceProductCell
+                                    name={detailItem.description}
+                                    code={
+                                      detailItem.code ?? detailItem.productId
+                                    }
+                                    productId={null}
+                                  />
+                                  <div className={styles.itemQuantity}>
+                                    <small>Qtd.</small>
+                                    <strong>
+                                      {Number(
+                                        detailItem.quantity,
+                                      ).toLocaleString("pt-BR")}
+                                    </strong>
+                                  </div>
+                                </div>
                               </td>
                               <td className={styles.numeric}>
                                 <small>Valor do item</small>

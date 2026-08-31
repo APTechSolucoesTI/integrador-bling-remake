@@ -341,6 +341,30 @@
 .itemProduct > small {
   margin-top: 5px !important;
 }
+.itemProductLayout {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.itemProductLayout > div {
+  min-width: 0;
+  flex: 1;
+}
+.itemProductLayout small {
+  display: block;
+  margin-top: 5px;
+}
+.itemProductBling {
+  width: 29px;
+  height: 29px;
+  flex: 0 0 29px;
+  border: 1px solid #cfe2d6;
+  border-radius: 8px;
+  display: inline-grid !important;
+  place-items: center;
+  color: #247a48;
+  background: #eff8f2;
+}
 .itemDetailWarning > td {
   background: #fffaf0;
 }

@@ -901,34 +901,40 @@ export function FinanceClient() {
                               key={`detail-${detailItem.id}`}
                               className={`${styles.itemDetailRow} ${detailItem.inconsistencia ? styles.itemDetailWarning : ""}`}
                             >
-                              <td className={styles.itemBling}>
-                                {detailItem.produtoId ? (
-                                  <a
-                                    href={blingProductUrl(detailItem.produtoId)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    title="Abrir produto no Bling"
-                                    aria-label={`Abrir ${detailItem.nome} no Bling`}
-                                  >
-                                    <PackageSearch size={15} />
-                                  </a>
-                                ) : null}
-                              </td>
-                              <td colSpan={3} className={styles.itemProduct}>
-                                <InvoiceProductCell
-                                  name={detailItem.nome}
-                                  code={
-                                    detailItem.codigo ?? detailItem.produtoId
-                                  }
-                                  productId={null}
-                                  inconsistency={detailItem.inconsistencia}
-                                />
-                                <small>
-                                  CFOP {detailItem.cfop ?? "—"} · Qtd.{" "}
-                                  {Number(detailItem.quantidade).toLocaleString(
-                                    "pt-BR",
-                                  )}
-                                </small>
+                              <td colSpan={4} className={styles.itemProduct}>
+                                <div className={styles.itemProductLayout}>
+                                  {detailItem.produtoId ? (
+                                    <a
+                                      className={styles.itemProductBling}
+                                      href={blingProductUrl(
+                                        detailItem.produtoId,
+                                      )}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Abrir produto no Bling"
+                                      aria-label={`Abrir ${detailItem.nome} no Bling`}
+                                    >
+                                      <PackageSearch size={15} />
+                                    </a>
+                                  ) : null}
+                                  <div>
+                                    <InvoiceProductCell
+                                      name={detailItem.nome}
+                                      code={
+                                        detailItem.codigo ??
+                                        detailItem.produtoId
+                                      }
+                                      productId={null}
+                                      inconsistency={detailItem.inconsistencia}
+                                    />
+                                    <small>
+                                      CFOP {detailItem.cfop ?? "—"} · Qtd.{" "}
+                                      {Number(
+                                        detailItem.quantidade,
+                                      ).toLocaleString("pt-BR")}
+                                    </small>
+                                  </div>
+                                </div>
                               </td>
                               <td>
                                 <small>Venda líquida</small>
