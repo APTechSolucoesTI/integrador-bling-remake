@@ -12,10 +12,6 @@ export function consumeListNavigationState<T>(key: string): T | null {
   window.sessionStorage.removeItem(storageKey);
   if (!raw) return null;
 
-  const navigation = performance.getEntriesByType("navigation")[0] as
-    PerformanceNavigationTiming | undefined;
-  if (navigation?.type === "reload") return null;
-
   try {
     return JSON.parse(raw) as T;
   } catch {

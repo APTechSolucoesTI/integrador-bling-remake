@@ -181,16 +181,8 @@ export function NfeClient() {
               (await optionsResponse.json()) as InvoiceFilterOptionsResponse,
             );
           }
-          const shouldRestore = new URLSearchParams(window.location.search).has(
-            "restoreFilters",
-          );
-          const restored = shouldRestore
-            ? consumeListNavigationState<NfeNavigationState>("nfe")
-            : null;
-          if (!shouldRestore) clearListNavigationState("nfe");
-          if (shouldRestore) {
-            window.history.replaceState(window.history.state, "", "/app/nfe");
-          }
+          const restored =
+            consumeListNavigationState<NfeNavigationState>("nfe");
           const search =
             new URLSearchParams(window.location.search).get("search")?.trim() ??
             "";
@@ -244,11 +236,6 @@ export function NfeClient() {
       appliedFilters,
       page: data?.pagination.page ?? 1,
     });
-    window.history.replaceState(
-      window.history.state,
-      "",
-      "/app/nfe?restoreFilters=1",
-    );
   }
 
   function selectStatus(statusId: number | null) {
@@ -806,7 +793,7 @@ export function NfeClient() {
                         </td>
                         <td>
                           <Link
-                            href={`/app/nfe/${invoice.id}?returnTo=${encodeURIComponent("/app/nfe?restoreFilters=1")}`}
+                            href={`/app/nfe/${invoice.id}?returnTo=${encodeURIComponent("/app/nfe")}`}
                             onClick={(event) => {
                               if (
                                 !event.ctrlKey &&

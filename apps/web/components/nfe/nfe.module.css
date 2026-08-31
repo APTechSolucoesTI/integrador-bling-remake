@@ -601,13 +601,13 @@
   overflow-x: auto;
 }
 
-.tableWrap table {
+.tableWrap > table {
   width: 100%;
   border-collapse: collapse;
   min-width: 1040px;
 }
 
-.tableWrap th {
+.tableWrap > table > thead > tr > th {
   padding: 11px 15px;
   color: #819088;
   background: #f8faf9;
@@ -631,7 +631,7 @@
   cursor: pointer;
 }
 
-.tableWrap td {
+.tableWrap > table > tbody > tr > td {
   padding: 13px 15px;
   border-top: 1px solid #edf0ee;
   color: #526159;
@@ -639,27 +639,27 @@
   vertical-align: middle;
 }
 
-.tableWrap tbody tr:hover {
+.tableWrap > table > tbody > tr:hover {
   background: #fbfdfc;
 }
 
-.tableWrap td strong,
-.tableWrap td small {
+.tableWrap > table > tbody > tr > td > strong,
+.tableWrap > table > tbody > tr > td > small {
   display: block;
 }
 
-.tableWrap td strong {
+.tableWrap > table > tbody > tr > td > strong {
   color: #23342c;
   font-size: 11px;
 }
 
-.tableWrap td small {
+.tableWrap > table > tbody > tr > td > small {
   margin-top: 3px;
   color: #94a099;
   font-size: 8px;
 }
 
-.tableWrap a {
+.tableWrap > table > tbody > tr > td > a {
   display: inline-flex;
   align-items: center;
   gap: 5px;

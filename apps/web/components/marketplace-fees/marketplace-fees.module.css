@@ -22,10 +22,9 @@
 
 .filterGrid {
   display: grid;
-  grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(
-      180px,
-      1fr
-    ) minmax(350px, 1.8fr) auto;
+  grid-template-columns:
+    minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(180px, 1fr)
+    minmax(350px, 1.8fr) auto;
   gap: 9px;
   align-items: end;
 }
@@ -90,13 +89,14 @@
   scrollbar-gutter: stable;
 }
 
-.tableWrap table {
+.tableWrap > table {
   width: 100%;
   min-width: 1520px;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
-.tableWrap th {
+.tableWrap > table > thead > tr > th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -112,7 +112,7 @@
   white-space: nowrap;
 }
 
-.tableWrap td {
+.tableWrap > table > tbody > tr > td {
   padding: 12px;
   border-bottom: 1px solid #edf0ee;
   color: #34463c;
@@ -120,7 +120,7 @@
   white-space: nowrap;
 }
 
-.tableWrap tbody tr:hover td {
+.tableWrap > table > tbody > tr:hover > td {
   background: #f8fcfa;
 }
 

@@ -116,10 +116,11 @@
   gap: 6px;
   white-space: nowrap;
 }
-.tableWrap table {
+.tableWrap > table {
   min-width: 1370px;
+  table-layout: fixed;
 }
-.tableWrap td {
+.tableWrap > table > tbody > tr > td {
   max-width: 245px;
 }
 .profit,

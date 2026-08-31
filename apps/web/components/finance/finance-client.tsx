@@ -158,16 +158,8 @@ export function FinanceClient() {
   );
 
   useEffect(() => {
-    const shouldRestore = new URLSearchParams(window.location.search).has(
-      "restoreFilters",
-    );
-    const restored = shouldRestore
-      ? consumeListNavigationState<FinanceNavigationState>("finance")
-      : null;
-    if (!shouldRestore) clearListNavigationState("finance");
-    if (shouldRestore) {
-      window.history.replaceState(window.history.state, "", "/app/finance");
-    }
+    const restored =
+      consumeListNavigationState<FinanceNavigationState>("finance");
     if (restored) {
       setDraft(restored.draft);
       setApplied(restored.applied);
@@ -221,17 +213,12 @@ export function FinanceClient() {
       applied,
       page,
     });
-    window.history.replaceState(
-      window.history.state,
-      "",
-      "/app/finance?restoreFilters=1",
-    );
   }
 
   function openDetail(id: number) {
     preserveNavigation();
     router.push(
-      `/app/finance/nfe/${id}?returnTo=${encodeURIComponent("/app/finance?restoreFilters=1")}`,
+      `/app/finance/nfe/${id}?returnTo=${encodeURIComponent("/app/finance")}`,
     );
   }
 
@@ -800,7 +787,7 @@ export function FinanceClient() {
                         </td>
                         <td>
                           <Link
-                            href={`/app/finance/nfe/${item.id}?returnTo=${encodeURIComponent("/app/finance?restoreFilters=1")}`}
+                            href={`/app/finance/nfe/${item.id}?returnTo=${encodeURIComponent("/app/finance")}`}
                             onClick={(event) => {
                               event.stopPropagation();
                               if (
