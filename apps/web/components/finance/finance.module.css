@@ -304,6 +304,44 @@
   color: #65756c;
   font-size: 9px;
 }
+.itemDetailRow > td {
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+  background: #f5faf7;
+  vertical-align: top !important;
+}
+.itemDetailRow > td > small {
+  margin-bottom: 4px;
+  color: #78877f;
+  font-size: 7px;
+  font-weight: 700;
+}
+.itemDetailRow > td > strong {
+  color: #243b30;
+  font-size: 10px;
+  line-height: 1.35;
+}
+.itemIndent {
+  position: relative;
+}
+.itemIndent span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 19px;
+  width: 2px;
+  background: #9acdb0;
+}
+.itemProduct {
+  max-width: none !important;
+  white-space: normal;
+}
+.itemProduct > small {
+  margin-top: 5px !important;
+}
+.itemDetailWarning > td {
+  background: #fffaf0;
+}
 .detailError {
   color: #a64747;
   background: #fff7f7;

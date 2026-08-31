@@ -52,7 +52,7 @@ import {
   consumeListNavigationState,
   saveListNavigationState,
 } from "../../lib/list-navigation-state";
-import { FinancialInvoiceItemsDetail } from "../shared/invoice-items-detail";
+import { InvoiceProductCell } from "../shared/invoice-items-detail";
 import shell from "../nfe/nfe.module.css";
 import styles from "./finance.module.css";
 
@@ -869,30 +869,116 @@ export function FinanceClient() {
                         </td>
                       </tr>
                       {expandedId === item.id ? (
-                        <tr className={styles.detailRow}>
-                          <td colSpan={10}>
-                            {detailLoading === item.id ? (
-                              <div className={styles.detailState}>
-                                <LoaderCircle
-                                  className={shell.spin}
-                                  size={18}
-                                />{" "}
-                                Carregando itens...
-                              </div>
-                            ) : null}
-                            {detailError[item.id] ? (
-                              <div className={styles.detailError}>
-                                {detailError[item.id]}
-                              </div>
-                            ) : null}
-                            {detailCache[item.id] ? (
-                              <FinancialInvoiceItemsDetail
-                                items={detailCache[item.id]!.items}
-                                compact
-                              />
-                            ) : null}
-                          </td>
-                        </tr>
+                        <>
+                          {detailLoading === item.id ? (
+                            <tr className={styles.detailRow}>
+                              <td colSpan={10}>
+                                <div className={styles.detailState}>
+                                  <LoaderCircle
+                                    className={shell.spin}
+                                    size={18}
+                                  />{" "}
+                                  Carregando itens...
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                          {detailError[item.id] ? (
+                            <tr className={styles.detailRow}>
+                              <td colSpan={10}>
+                                <div className={styles.detailError}>
+                                  {detailError[item.id]}
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                          {detailCache[item.id]?.items.map((detailItem) => (
+                            <tr
+                              key={`detail-${detailItem.id}`}
+                              className={`${styles.itemDetailRow} ${detailItem.inconsistencia ? styles.itemDetailWarning : ""}`}
+                            >
+                              <td
+                                className={styles.itemIndent}
+                                aria-hidden="true"
+                              >
+                                <span />
+                              </td>
+                              <td aria-hidden="true" />
+                              <td colSpan={2} className={styles.itemProduct}>
+                                <InvoiceProductCell
+                                  name={detailItem.nome}
+                                  code={detailItem.codigo}
+                                  productId={detailItem.produtoId}
+                                  inconsistency={detailItem.inconsistencia}
+                                />
+                                <small>
+                                  CFOP {detailItem.cfop ?? "—"} · Qtd.{" "}
+                                  {Number(detailItem.quantidade).toLocaleString(
+                                    "pt-BR",
+                                  )}
+                                </small>
+                              </td>
+                              <td>
+                                <small>Venda líquida</small>
+                                <strong>
+                                  {money(detailItem.vendaLiquida)}
+                                </strong>
+                              </td>
+                              <td>
+                                <small>Desconto · Frete · Outras</small>
+                                <strong>
+                                  {money(detailItem.desconto)} ·{" "}
+                                  {money(detailItem.frete)} ·{" "}
+                                  {money(detailItem.outrasDespesas)}
+                                </strong>
+                              </td>
+                              <td>
+                                <small>Custo · Impostos</small>
+                                <strong>
+                                  {money(detailItem.custoLiquido)} ·{" "}
+                                  {money(detailItem.impostos)}
+                                </strong>
+                                <small>
+                                  Créditos:{" "}
+                                  {money(
+                                    String(
+                                      Number(detailItem.creditoIpi) +
+                                        Number(detailItem.creditoIcms),
+                                    ),
+                                  )}
+                                </small>
+                              </td>
+                              <td
+                                className={
+                                  Number(detailItem.lucro) < 0
+                                    ? styles.loss
+                                    : styles.profit
+                                }
+                              >
+                                <small>Lucro</small>
+                                <strong>{money(detailItem.lucro)}</strong>
+                              </td>
+                              <td
+                                className={
+                                  Number(detailItem.margemLucro) < 0
+                                    ? styles.loss
+                                    : styles.profit
+                                }
+                              >
+                                <small>Margem</small>
+                                <strong>{detailItem.margemLucro}%</strong>
+                              </td>
+                              <td>
+                                <small>Item</small>
+                                <strong>
+                                  {detailItem.inconsistencia
+                                    ? "Revisar"
+                                    : "Conferido"}
+                                </strong>
+                              </td>
+                            </tr>
+                          ))}
+                        </>
                       ) : null}
                     </Fragment>
                   ))}

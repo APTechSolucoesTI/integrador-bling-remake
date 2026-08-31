@@ -25,7 +25,7 @@ export function blingProductUrl(productId: string) {
   return `https://www.bling.com.br/produtos.php#edit/${encodeURIComponent(productId)}`;
 }
 
-function ProductCell({
+export function InvoiceProductCell({
   name,
   code,
   productId,
@@ -113,7 +113,7 @@ export function FinancialInvoiceItemsDetail({
             >
               <div className={styles.inlineProduct}>
                 <span>Item / produto</span>
-                <ProductCell
+                <InvoiceProductCell
                   name={item.nome}
                   code={item.codigo}
                   productId={item.produtoId}
@@ -225,7 +225,7 @@ export function FinancialInvoiceItemsDetail({
                 }
               >
                 <td data-label="Item / produto">
-                  <ProductCell
+                  <InvoiceProductCell
                     name={item.nome}
                     code={item.codigo}
                     productId={item.produtoId}
@@ -328,7 +328,7 @@ export function MarketplaceInvoiceItemsDetail({
           >
             <div className={styles.inlineProduct}>
               <span>Descrição / SKU</span>
-              <ProductCell
+              <InvoiceProductCell
                 name={item.description}
                 code={item.code}
                 productId={item.productId}

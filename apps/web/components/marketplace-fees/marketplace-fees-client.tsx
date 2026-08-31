@@ -28,7 +28,7 @@ import { downloadCsv } from "../../lib/csv";
 import { ApplicationSidebar } from "../layout/application-sidebar";
 import { ApplicationHeaderActions } from "../layout/application-header-actions";
 import { ApplicationGlobalSearch } from "../layout/application-global-search";
-import { MarketplaceInvoiceItemsDetail } from "../shared/invoice-items-detail";
+import { InvoiceProductCell } from "../shared/invoice-items-detail";
 import shell from "../nfe/nfe.module.css";
 import styles from "./marketplace-fees.module.css";
 
@@ -524,29 +524,87 @@ export function MarketplaceFeesClient() {
                         </td>
                       </tr>
                       {expandedId === item.id ? (
-                        <tr className={styles.detailRow}>
-                          <td colSpan={12}>
-                            {detailLoading === item.id ? (
-                              <div className={styles.detailState}>
-                                <LoaderCircle
-                                  className={shell.spin}
-                                  size={18}
-                                />{" "}
-                                Carregando itens...
-                              </div>
-                            ) : null}
-                            {detailError[item.id] ? (
-                              <div className={styles.detailError}>
-                                {detailError[item.id]}
-                              </div>
-                            ) : null}
-                            {detailCache[item.id] ? (
-                              <MarketplaceInvoiceItemsDetail
-                                items={detailCache[item.id]!.items}
-                              />
-                            ) : null}
-                          </td>
-                        </tr>
+                        <>
+                          {detailLoading === item.id ? (
+                            <tr className={styles.detailRow}>
+                              <td colSpan={12}>
+                                <div className={styles.detailState}>
+                                  <LoaderCircle
+                                    className={shell.spin}
+                                    size={18}
+                                  />{" "}
+                                  Carregando itens...
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                          {detailError[item.id] ? (
+                            <tr className={styles.detailRow}>
+                              <td colSpan={12}>
+                                <div className={styles.detailError}>
+                                  {detailError[item.id]}
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                          {detailCache[item.id]?.items.map((detailItem) => (
+                            <tr
+                              key={`detail-${detailItem.id}`}
+                              className={styles.itemDetailRow}
+                            >
+                              <td
+                                className={styles.itemIndent}
+                                aria-hidden="true"
+                              >
+                                <span />
+                              </td>
+                              <td colSpan={4} className={styles.itemProduct}>
+                                <InvoiceProductCell
+                                  name={detailItem.description}
+                                  code={detailItem.code}
+                                  productId={detailItem.productId}
+                                />
+                              </td>
+                              <td>
+                                <small>Qtd.</small>
+                                <strong>
+                                  {Number(detailItem.quantity).toLocaleString(
+                                    "pt-BR",
+                                  )}
+                                </strong>
+                              </td>
+                              <td className={styles.numeric}>
+                                <small>Valor do item</small>
+                                <strong>{money(detailItem.itemValue)}</strong>
+                              </td>
+                              <td className={styles.numericStrong}>
+                                <small>Comissão R$</small>
+                                <strong>
+                                  {money(detailItem.commissionValue)}
+                                </strong>
+                              </td>
+                              <td className={styles.numeric}>
+                                <small>Comissão %</small>
+                                <strong>
+                                  {percent(detailItem.commissionPercent)}
+                                </strong>
+                              </td>
+                              <td className={styles.numericStrong}>
+                                <small>Frete R$</small>
+                                <strong>
+                                  {money(detailItem.freightValue)}
+                                </strong>
+                              </td>
+                              <td className={styles.numeric}>
+                                <small>Frete %</small>
+                                <strong>
+                                  {percent(detailItem.freightPercent)}
+                                </strong>
+                              </td>
+                              <td aria-hidden="true" />
+                            </tr>
+                          ))}
+                        </>
                       ) : null}
                     </Fragment>
                   ))}
