@@ -569,7 +569,7 @@ export function MarketplaceFeesClient() {
                                   </a>
                                 ) : null}
                               </td>
-                              <td colSpan={5} className={styles.itemProduct}>
+                              <td colSpan={4} className={styles.itemProduct}>
                                 <div className={styles.itemProductWithQuantity}>
                                   <InvoiceProductCell
                                     name={detailItem.description}
@@ -589,7 +589,11 @@ export function MarketplaceFeesClient() {
                                 </div>
                               </td>
                               <td className={styles.numeric}>
-                                <small>Valor do item</small>
+                                <small>Valor unitário</small>
+                                <strong>{money(detailItem.unitValue)}</strong>
+                              </td>
+                              <td className={styles.numeric}>
+                                <small>Valor total do item</small>
                                 <strong>{money(detailItem.itemValue)}</strong>
                               </td>
                               <td className={styles.numericStrong}>

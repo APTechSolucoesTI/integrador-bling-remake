@@ -45,6 +45,7 @@ interface MarketplaceFeeItemRow {
   description: string;
   quantity: string;
   itemValue: string;
+  unitValue: string;
   commissionValue: string;
   commissionPercent: string;
   freightValue: string;
@@ -226,6 +227,11 @@ export class MarketplaceFeesService {
         COALESCE(NULLIF(BTRIM(p.nome), ''), NULLIF(BTRIM(ni.descricao), ''), 'Produto não identificado') AS description,
         COALESCE(ni.qnt, 0)::numeric::text AS quantity,
         ROUND(COALESCE(ni.venda_total, 0)::numeric, 2)::text AS "itemValue",
+        ROUND(CASE
+          WHEN COALESCE(ni.venda_unitario, 0) <> 0 THEN ni.venda_unitario
+          WHEN COALESCE(ni.qnt, 0) <> 0 THEN COALESCE(ni.venda_total, 0) / ni.qnt
+          ELSE 0
+        END::numeric, 2)::text AS "unitValue",
         ROUND(COALESCE(SUM(fi.valor) FILTER (WHERE fi.nome ILIKE '%Mercado Livre%'), 0)::numeric, 2)::text AS "commissionValue",
         ROUND(CASE WHEN COALESCE(ni.venda_total, 0) = 0 THEN 0
           ELSE COALESCE(SUM(fi.valor) FILTER (WHERE fi.nome ILIKE '%Mercado Livre%'), 0) / ni.venda_total * 100 END, 2)::text AS "commissionPercent",

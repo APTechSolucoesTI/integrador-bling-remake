@@ -10,6 +10,7 @@ export interface MarketplaceDetailItem {
   description: string;
   quantity: string;
   itemValue: string;
+  unitValue: string;
   commissionValue: string;
   commissionPercent: string;
   freightValue: string;

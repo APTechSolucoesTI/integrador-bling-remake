@@ -1404,6 +1404,7 @@ export const marketplaceFeeItemsResponseSchema = z.object({
       description: z.string(),
       quantity: z.string(),
       itemValue: moneySchema,
+      unitValue: moneySchema,
       commissionValue: moneySchema,
       commissionPercent: z.string().regex(/^\d+\.\d{2}$/),
       freightValue: moneySchema,
