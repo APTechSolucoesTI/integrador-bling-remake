@@ -321,6 +321,18 @@
   font-size: 10px;
   line-height: 1.35;
 }
+
+.tableWrap > table > tbody > tr.itemDetailRow > td.itemSpacer {
+  padding: 0 !important;
+  background: #f5faf7 !important;
+  border-right: 0 !important;
+  box-shadow: none !important;
+}
+
+.tableWrap > table > tbody > tr.itemDetailRow > td:first-child {
+  background: #f5faf7 !important;
+}
+
 .itemBling {
   text-align: center;
   background: #f5faf7 !important;
