@@ -214,16 +214,18 @@
   line-height: 1.35;
   text-align: inherit;
 }
-.itemIndent {
-  position: relative;
+.itemBling {
+  text-align: center !important;
 }
-.itemIndent span {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 19px;
-  width: 2px;
-  background: #9acdb0;
+.itemBling a {
+  width: 29px;
+  height: 29px;
+  border: 1px solid #cfe2d6;
+  border-radius: 8px;
+  display: inline-grid;
+  place-items: center;
+  color: #247a48;
+  background: #eff8f2;
 }
 .itemProduct {
   white-space: normal !important;

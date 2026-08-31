@@ -15,6 +15,7 @@ import {
   Filter,
   LoaderCircle,
   Menu,
+  PackageSearch,
   RefreshCw,
   Search,
   X,
@@ -28,7 +29,10 @@ import { downloadCsv } from "../../lib/csv";
 import { ApplicationSidebar } from "../layout/application-sidebar";
 import { ApplicationHeaderActions } from "../layout/application-header-actions";
 import { ApplicationGlobalSearch } from "../layout/application-global-search";
-import { InvoiceProductCell } from "../shared/invoice-items-detail";
+import {
+  blingProductUrl,
+  InvoiceProductCell,
+} from "../shared/invoice-items-detail";
 import shell from "../nfe/nfe.module.css";
 import styles from "./marketplace-fees.module.css";
 
@@ -552,17 +556,24 @@ export function MarketplaceFeesClient() {
                               key={`detail-${detailItem.id}`}
                               className={styles.itemDetailRow}
                             >
-                              <td
-                                className={styles.itemIndent}
-                                aria-hidden="true"
-                              >
-                                <span />
+                              <td className={styles.itemBling}>
+                                {detailItem.productId ? (
+                                  <a
+                                    href={blingProductUrl(detailItem.productId)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Abrir produto no Bling"
+                                    aria-label={`Abrir ${detailItem.description} no Bling`}
+                                  >
+                                    <PackageSearch size={15} />
+                                  </a>
+                                ) : null}
                               </td>
                               <td colSpan={4} className={styles.itemProduct}>
                                 <InvoiceProductCell
                                   name={detailItem.description}
-                                  code={detailItem.code}
-                                  productId={detailItem.productId}
+                                  code={detailItem.code ?? detailItem.productId}
+                                  productId={null}
                                 />
                               </td>
                               <td>

@@ -26,6 +26,7 @@ import {
   LogOut,
   Menu,
   Orbit,
+  PackageSearch,
   Percent,
   RefreshCw,
   Search,
@@ -52,7 +53,10 @@ import {
   consumeListNavigationState,
   saveListNavigationState,
 } from "../../lib/list-navigation-state";
-import { InvoiceProductCell } from "../shared/invoice-items-detail";
+import {
+  blingProductUrl,
+  InvoiceProductCell,
+} from "../shared/invoice-items-detail";
 import shell from "../nfe/nfe.module.css";
 import styles from "./finance.module.css";
 
@@ -897,18 +901,26 @@ export function FinanceClient() {
                               key={`detail-${detailItem.id}`}
                               className={`${styles.itemDetailRow} ${detailItem.inconsistencia ? styles.itemDetailWarning : ""}`}
                             >
-                              <td
-                                className={styles.itemIndent}
-                                aria-hidden="true"
-                              >
-                                <span />
+                              <td className={styles.itemBling}>
+                                {detailItem.produtoId ? (
+                                  <a
+                                    href={blingProductUrl(detailItem.produtoId)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Abrir produto no Bling"
+                                    aria-label={`Abrir ${detailItem.nome} no Bling`}
+                                  >
+                                    <PackageSearch size={15} />
+                                  </a>
+                                ) : null}
                               </td>
-                              <td aria-hidden="true" />
-                              <td colSpan={2} className={styles.itemProduct}>
+                              <td colSpan={3} className={styles.itemProduct}>
                                 <InvoiceProductCell
                                   name={detailItem.nome}
-                                  code={detailItem.codigo}
-                                  productId={detailItem.produtoId}
+                                  code={
+                                    detailItem.codigo ?? detailItem.produtoId
+                                  }
+                                  productId={null}
                                   inconsistency={detailItem.inconsistencia}
                                 />
                                 <small>
