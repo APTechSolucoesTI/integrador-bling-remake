@@ -38,6 +38,10 @@ import {
   type ListNfeInput,
 } from "@integrador/integrations";
 
+const DEFAULT_NFE_MAX_PAGES = 100;
+const HARD_NFE_MAX_PAGES = 100;
+const NFE_DETAIL_MAX_ATTEMPTS = 3;
+
 interface IdRow {
   id: number;
 }
@@ -169,7 +173,10 @@ export class ProductionIntegrationProcessor {
     const summaries: BlingNfeSummary[] = [];
     let requestedPages = 0;
     const pageSize = Math.min(Math.max(input.pageSize ?? 100, 1), 100);
-    const maxPages = Math.min(Math.max(input.maxPages ?? 4, 1), 4);
+    const maxPages = Math.min(
+      Math.max(input.maxPages ?? DEFAULT_NFE_MAX_PAGES, 1),
+      HARD_NFE_MAX_PAGES,
+    );
     const maxRecords = Math.max(input.maxRecords ?? Number.MAX_SAFE_INTEGER, 1);
     // Cancelamentos possuem fluxo próprio e nunca entram na sincronização
     // fiscal/financeira normal, mesmo que uma política antiga ainda contenha 2.
@@ -181,6 +188,7 @@ export class ProductionIntegrationProcessor {
     );
     for (const status of statuses) {
       for (const direction of directions) {
+        let completedBucket = false;
         for (let page = 1; page <= maxPages; page += 1) {
           requestedPages += 1;
           const items = await this.#bling.listNfe(context, {
@@ -192,8 +200,15 @@ export class ProductionIntegrationProcessor {
             limit: pageSize,
           });
           summaries.push(...items.slice(0, maxRecords - summaries.length));
-          if (items.length < pageSize || summaries.length >= maxRecords) break;
+          if (items.length < pageSize || summaries.length >= maxRecords) {
+            completedBucket = true;
+            break;
+          }
         }
+        if (!completedBucket)
+          throw new BadRequestError(
+            `A consulta de NF-e excedeu ${maxPages * pageSize} registros para a situação ${status}; sincronize um período menor para evitar dados incompletos`,
+          );
         if (summaries.length >= maxRecords) break;
       }
       if (summaries.length >= maxRecords) break;
@@ -423,7 +438,10 @@ export class ProductionIntegrationProcessor {
     const detailIgnoredReasons: string[] = [];
     for (const invoice of localInvoices) {
       try {
-        const result = await this.syncNfeDetails(context, invoice.id);
+        const result = await this.#syncNfeDetailsWithRetry(
+          context,
+          invoice.id,
+        );
         if (result["ignored"] === true) {
           ignoredAfterDetail += 1;
           const reason = result["reason"];
@@ -496,6 +514,26 @@ export class ProductionIntegrationProcessor {
             ? "enabled"
             : "disabled",
     };
+  }
+
+  async #syncNfeDetailsWithRetry(
+    context: GatewayContext & { demo: false },
+    nfeId: number,
+  ): Promise<Record<string, unknown>> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= NFE_DETAIL_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.syncNfeDetails(context, nfeId);
+      } catch (error) {
+        lastError = error;
+        if (!isTransientBlingError(error) || attempt === NFE_DETAIL_MAX_ATTEMPTS)
+          throw error;
+        await new Promise<void>((resolve) =>
+          setTimeout(resolve, attempt * 3_000),
+        );
+      }
+    }
+    throw lastError;
   }
 
   async syncProducts(
@@ -1925,6 +1963,17 @@ function normalizedLabel(value: string | undefined): string {
 
 function safeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Falha desconhecida";
+}
+
+function isTransientBlingError(error: unknown): boolean {
+  const message = safeErrorMessage(error);
+  return (
+    message === "BlingRateLimited" ||
+    message === "BlingRetryExhausted" ||
+    /^BlingHttpError:5\d\d$/.test(message) ||
+    message.includes("fetch failed") ||
+    message.includes("TimeoutError")
+  );
 }
 
 function deliveryFailureReason(error: unknown): string {
