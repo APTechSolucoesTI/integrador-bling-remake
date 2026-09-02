@@ -547,15 +547,18 @@ export class ProductionIntegrationProcessor {
       const groups = await this.#bling.listProductGroups(context, page, 100);
       factoryGroups.push(
         ...groups.filter(
-          (group) =>
-            normalizedLabel(group.name) === "fabricacao propria" ||
-            normalizedLabel(group.parentName) === "fabricacao propria",
+          (group) => isOwnManufactureGroupName(group.name),
         ),
       );
       if (groups.length < 100) break;
     }
 
     await this.database.$transaction(async (transaction) => {
+      await transaction.$executeRaw(Prisma.sql`
+        UPDATE grupo_produto
+        SET own_manufacture = (UPPER(BTRIM(COALESCE(nome,''))) ~ '^FP($|[[:space:]-])')
+        WHERE unit_id = ${unitId}
+      `);
       for (const group of factoryGroups) {
         const rows = await transaction.$queryRaw<IdRow[]>(Prisma.sql`
           SELECT id FROM grupo_produto
@@ -595,6 +598,7 @@ export class ProductionIntegrationProcessor {
       FROM produtos WHERE unit_id = ${unitId}
     `);
     const window = windows[0]!;
+    const factoryGroupIds = new Set(factoryGroups.map((group) => group.id));
     let pages = 0;
     let fetched = 0;
     let inserted = 0;
@@ -644,7 +648,9 @@ export class ProductionIntegrationProcessor {
               `)
               : [];
             const groupId = groupRows[0]?.id ?? null;
-            const ownProduction = groupId !== null;
+            const ownProduction =
+              product.detail.productGroupId !== undefined &&
+              factoryGroupIds.has(product.detail.productGroupId);
             const rows = await transaction.$queryRaw<IdRow[]>(Prisma.sql`
             SELECT id FROM produtos
             WHERE id_produto = ${product.summary.id} AND unit_id = ${unitId}
@@ -1959,6 +1965,11 @@ function normalizedLabel(value: string | undefined): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function isOwnManufactureGroupName(value: string | undefined): boolean {
+  const normalized = normalizedLabel(value);
+  return normalized === "fp" || normalized.startsWith("fp ");
 }
 
 function safeErrorMessage(error: unknown): string {

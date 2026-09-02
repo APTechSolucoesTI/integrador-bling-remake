@@ -809,7 +809,7 @@ function itemAnalysisQuery(
         COALESCE(NULLIF(BTRIM(p.codigo),''),i.id_produto,'—') product_code,
         COALESCE(NULLIF(BTRIM(p.nome),''),NULLIF(BTRIM(i.descricao),''),'Produto não identificado') product_name,
         COALESCE(NULLIF(BTRIM(g.nome),''),'Sem grupo') product_group,
-        (COALESCE(p.fabricacao_propria,FALSE) OR COALESCE(g.own_manufacture,FALSE)) is_manufacturing,
+        (UPPER(BTRIM(COALESCE(g.nome,''))) ~ '^FP($|[[:space:]-])') is_manufacturing,
         COALESCE(i.qnt,0)::numeric quantity,
         COALESCE(i.venda_bruto_total,0)::numeric revenue,
         COALESCE(i.custo_total,0)::numeric cmv,
@@ -905,7 +905,7 @@ function reportItemAggregation(input: DashboardInvoiceReportQuery): Prisma.Sql {
       WHERE ri.nfe_id=n.id AND ri.unit_id=n.unit_id
         ${input.product ? Prisma.sql`AND COALESCE(NULLIF(BTRIM(rp.nome),''),NULLIF(BTRIM(ri.descricao),''),'') ILIKE ${`%${input.product}%`}` : Prisma.empty}
         ${input.productGroup ? Prisma.sql`AND COALESCE(NULLIF(BTRIM(rg.nome),''),'Sem grupo')=${input.productGroup}` : Prisma.empty}
-        ${input.view === "manufacturing" ? Prisma.sql`AND (COALESCE(rp.fabricacao_propria,FALSE) OR COALESCE(rg.own_manufacture,FALSE))` : Prisma.empty}
+        ${input.view === "manufacturing" ? Prisma.sql`AND UPPER(BTRIM(COALESCE(rg.nome,''))) ~ '^FP($|[[:space:]-])'` : Prisma.empty}
     ) ia ON TRUE
   `;
 }
