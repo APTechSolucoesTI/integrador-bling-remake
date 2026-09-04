@@ -29,6 +29,7 @@ interface ProcessorDependencies {
       context: { tenantId: string; correlationId: string; demo: false },
       input: Pick<ListNfeInput, "issuedFrom" | "issuedTo"> & {
         autoDeliver?: boolean;
+        skipCancellationCleanup?: boolean;
       },
     ): Promise<Record<string, unknown>>;
     syncNfeDetails(
@@ -151,6 +152,7 @@ export function createIntegrationProcessor(
           const nfe = await dependencies.production.syncNfe(context, {
             issuedFrom: from,
             issuedTo: to,
+            skipCancellationCleanup: true,
           });
           return {
             mode: "production",

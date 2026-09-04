@@ -44,6 +44,7 @@ export interface ListNfeInput {
 
 export interface BlingNfeDetail {
   id: string;
+  status?: number;
   number?: string;
   series?: number;
   xmlUrl?: string;
@@ -328,6 +329,7 @@ export class BlingRealGateway implements BlingGateway {
     const seller = record(data["vendedor"]);
     const contact = record(data["contato"]);
     const number = stringOrNumberValue(data["numero"]);
+    const status = numericValue(data["situacao"]);
     const series = numericValue(data["serie"]);
     const xmlUrl = stringValue(data["xml"]);
     const pdfUrl = stringValue(data["linkPDF"]);
@@ -341,6 +343,7 @@ export class BlingRealGateway implements BlingGateway {
       id,
       paymentMethodIds: [...new Set(paymentMethodIds)],
       logisticObjectIds: [...new Set(logisticObjectIds)],
+      ...(status === undefined ? {} : { status }),
       ...(number === undefined ? {} : { number }),
       ...(series === undefined ? {} : { series }),
       ...(xmlUrl === undefined ? {} : { xmlUrl }),

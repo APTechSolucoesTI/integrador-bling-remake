@@ -155,6 +155,7 @@ export class ProductionIntegrationProcessor {
       maxPages?: number;
       pageSize?: number;
       maxRecords?: number;
+      skipCancellationCleanup?: boolean;
     },
   ): Promise<Record<string, unknown>> {
     const tenant = await this.database.tenant.findUnique({
@@ -163,6 +164,13 @@ export class ProductionIntegrationProcessor {
     });
     if (!tenant?.active || tenant.demo)
       throw new BadRequestError("Tenant sem unidade produtiva ativa");
+
+    // A ressincronização normal também reconcilia cancelamentos do mesmo
+    // período. Assim uma NF-e que deixou de ser autorizada não permanece nos
+    // relatórios apenas porque a listagem principal consulta situações 5/6.
+    const cancellationCleanup = input.skipCancellationCleanup
+      ? { skipped: true }
+      : await this.syncCancelledNfe(context, input);
 
     const policy = resolveNfeSyncPolicy(
       await this.database.nfeSyncPolicy.findUnique({
@@ -513,6 +521,7 @@ export class ProductionIntegrationProcessor {
           : input.autoDeliver
             ? "enabled"
             : "disabled",
+      cancellationCleanup,
     };
   }
 
@@ -722,7 +731,8 @@ export class ProductionIntegrationProcessor {
     const unitId = await this.#productionUnit(context.tenantId);
     const cancelled: BlingNfeSummary[] = [];
     let pages = 0;
-    for (let page = 1; page <= 4; page += 1) {
+    let completed = false;
+    for (let page = 1; page <= HARD_NFE_MAX_PAGES; page += 1) {
       pages += 1;
       const items = await this.#bling.listNfe(context, {
         status: 2,
@@ -732,24 +742,50 @@ export class ProductionIntegrationProcessor {
         limit: 100,
       });
       cancelled.push(...items);
-      if (items.length < 100) break;
+      if (items.length < 100) {
+        completed = true;
+        break;
+      }
     }
-    let updated = 0;
+    if (!completed)
+      throw new BadRequestError(
+        `A consulta de NF-e canceladas excedeu ${HARD_NFE_MAX_PAGES * 100} registros; sincronize um período menor para evitar uma limpeza incompleta`,
+      );
+    let removed = 0;
     await this.database.$transaction(async (transaction) => {
-      for (const invoice of cancelled) {
-        updated += await transaction.$executeRaw(Prisma.sql`
-          UPDATE nfe
-          SET situacao = 2,
-              cancelled_at = NOW(),
-              invoice_message_status = 'skipped'::"MessageStatus",
-              obs_envio = 'NF-e cancelada no Bling'
+      const cancelledExternalIds = [
+        ...new Set(cancelled.map((invoice) => String(invoice.id))),
+      ];
+      if (cancelledExternalIds.length > 0) {
+        await transaction.$executeRaw(Prisma.sql`
+          DELETE FROM boleto
           WHERE unit_id = ${unitId}
-            AND (
-              id_bling::text = ${String(invoice.id)}
-              OR numero::text = ${invoice.number}
-            )
+            AND nfe_id_bling::text IN (${Prisma.join(cancelledExternalIds)})
+        `);
+        removed += await transaction.$executeRaw(Prisma.sql`
+          DELETE FROM nfe
+          WHERE unit_id = ${unitId}
+            AND id_bling::text IN (${Prisma.join(cancelledExternalIds)})
         `);
       }
+
+      // Limpa também registros que já estejam salvos com situação diferente
+      // das situações fiscais aceitas pelo produto (5 e 6).
+      await transaction.$executeRaw(Prisma.sql`
+        DELETE FROM boleto bill
+        USING nfe invoice
+        WHERE bill.unit_id = ${unitId}
+          AND invoice.unit_id = ${unitId}
+          AND bill.nfe_id = invoice.id
+          AND invoice.situacao NOT IN (5, 6)
+          AND invoice.data_emissao::date BETWEEN ${input.issuedFrom}::date AND ${input.issuedTo}::date
+      `);
+      removed += await transaction.$executeRaw(Prisma.sql`
+        DELETE FROM nfe
+        WHERE unit_id = ${unitId}
+          AND situacao NOT IN (5, 6)
+          AND data_emissao::date BETWEEN ${input.issuedFrom}::date AND ${input.issuedTo}::date
+      `);
     });
     await this.#auditSynchronization(
       context,
@@ -758,7 +794,7 @@ export class ProductionIntegrationProcessor {
         from: input.issuedFrom,
         to: input.issuedTo,
         fetched: cancelled.length,
-        updated,
+        removed,
       },
     );
     return {
@@ -766,7 +802,7 @@ export class ProductionIntegrationProcessor {
       from: input.issuedFrom,
       to: input.issuedTo,
       fetched: cancelled.length,
-      updated,
+      removed,
       pages,
     };
   }
@@ -1075,6 +1111,14 @@ export class ProductionIntegrationProcessor {
     }
 
     const detail = await this.#bling.getNfeDetail(context, invoice.blingId);
+    if (detail.status !== undefined && ![5, 6].includes(detail.status)) {
+      const reason =
+        detail.status === 2
+          ? "NF-e cancelada"
+          : `Situação ${detail.status} não permitida`;
+      await this.#removeIgnoredInvoice(context, invoice, reason);
+      return { mode: "production", ignored: true, reason };
+    }
     const detailIgnoredReason = detailPolicyReason(
       { sellerId: detail.sellerId, total: detail.total },
       policy,
